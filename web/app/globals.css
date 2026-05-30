@@ -453,7 +453,7 @@ button {
 
 .map-controls {
   position: fixed;
-  top: 16px;
+  bottom: 16px;
   right: 16px;
   z-index: 800;
   display: flex;
@@ -700,7 +700,7 @@ button {
   }
 
   .map-controls {
-    top: max(10px, env(safe-area-inset-top));
+    bottom: max(10px, env(safe-area-inset-bottom));
     right: 10px;
   }
 
