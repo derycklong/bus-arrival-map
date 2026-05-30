@@ -35,8 +35,8 @@ def _load_account_key():
 def get_stops(
     lat: float = Query(...),
     lng: float = Query(...),
-    radius: int = Query(300, ge=50, le=1000),
-    limit: int = Query(50, ge=1, le=100),
+    radius: int = Query(300, ge=50, le=2000),
+    limit: int = Query(200, ge=1, le=500),
 ):
     conn = get_connection()
     rows = conn.execute("SELECT stop_code, name, road, lat, lng FROM bus_stops").fetchall()

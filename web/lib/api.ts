@@ -1,9 +1,5 @@
 function getApiBase(): string {
-  if (typeof window === "undefined") return "/api";
-  if (process.env.NODE_ENV === "production") return "/api";
-  const { hostname } = window.location;
-  if (hostname === "localhost" || hostname === "127.0.0.1") return "/api";
-  return `http://${hostname}:8000/api`;
+  return "/api";
 }
 
 const API_BASE = getApiBase();
@@ -138,4 +134,20 @@ export function addFavourite(stopCode: string) {
 
 export function removeFavourite(stopCode: string) {
   return api("DELETE", "/favourites", { stop_code: stopCode });
+}
+
+export interface FavouriteBusesResponse {
+  bus_nos: string[];
+}
+
+export function getFavouriteBuses(stopCode: string) {
+  return api<FavouriteBusesResponse>("GET", `/favourites/buses?stop_code=${stopCode}`);
+}
+
+export function addFavouriteBus(stopCode: string, busNo: string) {
+  return api("POST", "/favourites/bus", { stop_code: stopCode, bus_no: busNo });
+}
+
+export function removeFavouriteBus(stopCode: string, busNo: string) {
+  return api("DELETE", "/favourites/bus", { stop_code: stopCode, bus_no: busNo });
 }

@@ -67,8 +67,17 @@ def init_db():
             UNIQUE(user_id, stop_code)
         );
 
+        CREATE TABLE IF NOT EXISTS user_favourite_buses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            stop_code TEXT NOT NULL,
+            bus_no TEXT NOT NULL,
+            UNIQUE(user_id, stop_code, bus_no)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_bus_stops_lat_lng ON bus_stops(lat, lng);
         CREATE INDEX IF NOT EXISTS idx_user_favourites_user ON user_favourites(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_fav_buses_user_stop ON user_favourite_buses(user_id, stop_code);
     """)
     conn.commit()
     _migrate_user_favourites(conn)

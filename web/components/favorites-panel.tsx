@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useEffect, useReducer, useRef, useCallback } from "react";
-import { getArrivals, StopBase, Service } from "@/lib/api";
+import {
+  getArrivals,
+  getFavouriteBuses,
+  addFavouriteBus,
+  removeFavouriteBus,
+  StopBase,
+  Service,
+} from "@/lib/api";
 import { FavouriteStop } from "@/lib/api";
 import { FavouriteStopWithArrivals } from "@/lib/use-favourites";
 import DurationText from "./duration-text";
@@ -86,8 +93,9 @@ export default function FavoritesPanel({
         // Swiping down — follow finger at all panel levels
         panelRef.current.style.transform = `translateY(${diff}px)`;
       } else if (!expanded && diff < 0) {
-        // Swiping up — rubber-band feedback before expanding
-        panelRef.current.style.transform = `translateY(${diff * 0.3}px)`;
+        // Swiping up — rubber-band feedback before expanding (grow height instead of translate)
+        const currentH = panelRef.current.offsetHeight;
+        panelRef.current.style.height = `${currentH + Math.abs(diff) * 0.3}px`;
       }
     }
   }, [expanded]);
@@ -102,6 +110,7 @@ export default function FavoritesPanel({
     // Reset visual position
     if (panelRef.current) {
       panelRef.current.style.transform = "";
+      panelRef.current.style.height = "";
     }
 
     if (diff > 100) {
@@ -122,7 +131,6 @@ export default function FavoritesPanel({
   useEffect(() => {
     if (selectedStop) {
       setDismissed(false);
-      setExpanded(false);
     }
   }, [selectedStop]);
 
@@ -130,11 +138,13 @@ export default function FavoritesPanel({
     arrivalsReducer,
     { services: [], loading: false, error: false }
   );
+  const [favBusNos, setFavBusNos] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!selectedStop) return;
     let cancelled = false;
     dispatch({ type: "fetch_start" });
+    setFavBusNos(new Set());
 
     getArrivals(selectedStop.stop_code)
       .then((data) => {
@@ -143,6 +153,12 @@ export default function FavoritesPanel({
       .catch(() => {
         if (!cancelled) dispatch({ type: "fetch_error" });
       });
+
+    getFavouriteBuses(selectedStop.stop_code)
+      .then((data) => {
+        if (!cancelled) setFavBusNos(new Set(data.bus_nos));
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -160,9 +176,12 @@ export default function FavoritesPanel({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [selectedStop, onCloseStop]);
 
-  const sorted = [...services].sort(
-    (a, b) => (a.next?.duration_ms ?? 999999) - (b.next?.duration_ms ?? 999999)
-  );
+  const sorted = [...services].sort((a, b) => {
+    const aFav = favBusNos.has(a.no);
+    const bFav = favBusNos.has(b.no);
+    if (aFav !== bFav) return aFav ? -1 : 1;
+    return (a.next?.duration_ms ?? 999999) - (b.next?.duration_ms ?? 999999);
+  });
 
   function handleRowClick(stop: FavouriteStop) {
     onSelectStop(stop);
@@ -285,6 +304,7 @@ export default function FavoritesPanel({
                 <table className="arrivals-table">
                   <thead>
                     <tr>
+                      <th className="col-fav"></th>
                       <th>Bus</th>
                       <th>Next</th>
                       <th>After</th>
@@ -292,20 +312,42 @@ export default function FavoritesPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {sorted.map((svc, i) => (
-                      <tr key={`${svc.no}-${svc.operator}-${i}`}>
-                        <td className="bus-number">{svc.no}</td>
-                        <td>
-                          <DurationText ms={svc.next?.duration_ms ?? null} />
-                        </td>
-                        <td>
-                          <DurationText ms={svc.subsequent?.duration_ms ?? null} />
-                        </td>
-                        <td className="destination-code">
-                          {svc.next?.destination_name || svc.next?.destination_code || ""}
-                        </td>
-                      </tr>
-                    ))}
+                    {sorted.map((svc, i) => {
+                      const isFavBus = favBusNos.has(svc.no);
+                      return (
+                        <tr key={`${svc.no}-${svc.operator}-${i}`} className={isFavBus ? "fav-bus-row" : ""}>
+                          <td className="col-fav">
+                            <button
+                              onClick={() => {
+                                const next = new Set(favBusNos);
+                                if (isFavBus) {
+                                  next.delete(svc.no);
+                                  removeFavouriteBus(selectedStop.stop_code, svc.no).catch(() => {});
+                                } else {
+                                  next.add(svc.no);
+                                  addFavouriteBus(selectedStop.stop_code, svc.no).catch(() => {});
+                                }
+                                setFavBusNos(next);
+                              }}
+                              title={isFavBus ? "Unfavorite bus" : "Favorite bus"}
+                              className="bus-fav-star"
+                            >
+                              {isFavBus ? "★" : "☆"}
+                            </button>
+                          </td>
+                          <td className="bus-number">{svc.no}</td>
+                          <td>
+                            <DurationText ms={svc.next?.duration_ms ?? null} />
+                          </td>
+                          <td>
+                            <DurationText ms={svc.subsequent?.duration_ms ?? null} />
+                          </td>
+                          <td className="destination-code">
+                            {svc.next?.destination_name || svc.next?.destination_code || ""}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

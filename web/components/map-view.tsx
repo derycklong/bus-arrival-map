@@ -7,8 +7,62 @@ import { getStops, Stop, StopBase } from "@/lib/api";
 
 const SG_CENTER: [number, number] = [1.3521, 103.8198];
 
-const LIGHT_TILES = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const LIGHT_TILES = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 const DARK_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+
+function createStopIcon(color: string, isSelected: boolean, isFav: boolean) {
+  const outer = isSelected ? 36 : 28;
+  const inner = isSelected ? 26 : 20;
+  const iconSize = isSelected ? 18 : 14;
+  const glowRing = isFav ? `0 0 0 3px ${color}44,` : "";
+  const shadow = ` ${glowRing} 0 2px 6px rgba(0,0,0,0.15)`;
+
+  return L.divIcon({
+    html: `<div style="
+      width:${outer}px;height:${outer}px;
+      display:flex;align-items:center;justify-content:center;
+    ">
+      <div style="
+        width:${inner}px;height:${inner}px;
+        border-radius:50%;
+        background:${color};
+        border:2.5px solid white;
+        box-shadow:${shadow};
+        display:flex;align-items:center;justify-content:center;
+        animation:${isFav ? "fav-pulse 1.8s ease-in-out infinite" : "none"};
+      ">
+        <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="13" rx="2.5"/>
+          <rect x="5" y="7" width="14" height="4" rx="0.5"/>
+          <line x1="5" y1="11" x2="19" y2="11"/>
+          <circle cx="8" cy="17" r="1"/>
+          <circle cx="16" cy="17" r="1"/>
+        </svg>
+      </div>
+    </div>`,
+    className: "",
+    iconSize: [outer, outer],
+    iconAnchor: [outer / 2, outer / 2],
+  });
+}
+
+// Panel: left 16px + width 348px = 364px obscured on left; offset by half = 182px
+const PANEL_OFFSET_PX = 182;
+
+function offsetForPanel(target: L.LatLng, zoom: number): L.LatLng {
+  if (window.innerWidth < 601) return target;
+  const point = L.CRS.EPSG3857.latLngToPoint(target, zoom);
+  const offsetPoint = L.point(point.x - PANEL_OFFSET_PX, point.y);
+  return L.CRS.EPSG3857.pointToLatLng(offsetPoint, zoom);
+}
+
+// Shift a map center RIGHT by the panel offset to get the visible area center for stop loading
+function panelCenter(center: L.LatLng, zoom: number): L.LatLng {
+  if (window.innerWidth < 601) return center;
+  const point = L.CRS.EPSG3857.latLngToPoint(center, zoom);
+  const shiftedPoint = L.point(point.x + PANEL_OFFSET_PX, point.y);
+  return L.CRS.EPSG3857.pointToLatLng(shiftedPoint, zoom);
+}
 
 interface MapViewProps {
   favouriteStopCodes: Set<string>;
@@ -82,15 +136,11 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
       for (const stop of stops) {
         const isFav = favCodes.has(stop.stop_code);
         const isSelected = selStop?.stop_code === stop.stop_code;
+        const color = isFav ? "#fbbf24" : "#7eb8ff";
+        const icon = createStopIcon(color, isSelected, isFav);
 
-        const marker = L.circleMarker([stop.lat, stop.lng], {
-          radius: isSelected ? 10 : 7,
-          fillColor: isSelected ? "#ffd700" : isFav ? "#ffd700" : "#0a6bff",
-          color: "#fff",
-          weight: isSelected ? 3 : 2,
-          fillOpacity: 0.8,
-        });
-        marker.bindTooltip(stop.name, { direction: "top", offset: [0, -8] });
+        const marker = L.marker([stop.lat, stop.lng], { icon });
+        marker.bindTooltip(stop.name, { direction: "top", offset: [0, -10] });
         marker.on("click", () => onSelectStopRef.current(stop));
         markersLayer.current?.addLayer(marker);
       }
@@ -100,7 +150,13 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
 
   // Load stops from API within current map bounds
   const loadStops = useCallback(async (map: L.Map) => {
-    const center = map.getCenter();
+    const zoom = map.getZoom();
+    if (zoom < 13) {
+      markersLayer.current?.clearLayers();
+      currentStops.current = [];
+      return;
+    }
+    const center = panelCenter(map.getCenter(), zoom);
     const bounds = map.getBounds();
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
@@ -110,7 +166,7 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
     const a =
       Math.sin(dlat / 2) ** 2 +
       Math.cos(sw.lat * Math.PI / 180) * Math.cos(ne.lat * Math.PI / 180) * Math.sin(dlng / 2) ** 2;
-    const radius = Math.min(Math.ceil(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.2), 1000);
+    const radius = Math.min(Math.ceil(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.2), 2000);
     if (radius < 50) return;
 
     try {
@@ -124,7 +180,7 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
 
   // Re-render markers when favourites or selected stop changes
   useEffect(() => {
-    if (currentStops.current.length > 0) {
+    if (currentStops.current.length > 0 && (mapInstance.current?.getZoom() ?? 0) >= 13) {
       renderStops(currentStops.current, favouriteStopCodes);
     }
   }, [favouriteStopCodes, selectedStop?.stop_code, renderStops]);
@@ -134,7 +190,9 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
     if (!selectedStop || !mapInstance.current) return;
     if (prevSelectedCode.current === selectedStop.stop_code) return;
     prevSelectedCode.current = selectedStop.stop_code;
-    mapInstance.current.flyTo([selectedStop.lat, selectedStop.lng], 16);
+    const currentZoom = mapInstance.current.getZoom();
+    const targetZoom = Math.max(currentZoom, 15);
+    mapInstance.current.flyTo(offsetForPanel(L.latLng(selectedStop.lat, selectedStop.lng), targetZoom), targetZoom);
   }, [selectedStop]);
 
   // Initialize map
@@ -143,8 +201,9 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
 
     const map = L.map(mapRef.current, {
       center: SG_CENTER,
-      zoom: 15,
+      zoom: 13,
       zoomControl: false,
+      attributionControl: false,
     });
 
     const tileUrl = theme === "dark" ? DARK_TILES : LIGHT_TILES;
@@ -157,10 +216,16 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
     mapInstance.current = map;
 
     loadStops(map);
+    handleUseLocation();
 
     let timer: ReturnType<typeof setTimeout>;
     map.on("moveend", () => {
       clearTimeout(timer);
+      if (map.getZoom() < 13) {
+        markersLayer.current?.clearLayers();
+        currentStops.current = [];
+        return;
+      }
       timer = setTimeout(() => loadStops(map), 500);
     });
 
@@ -168,7 +233,7 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
       map.remove();
       mapInstance.current = null;
     };
-  }, [loadStops, theme]);
+  }, [loadStops]);
 
   function handleUseLocation() {
     if (!navigator.geolocation) {
@@ -183,25 +248,38 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
         if (!map) return;
 
         locationLayer.current?.clearLayers();
-        L.circle([latitude, longitude], {
-          radius: Math.min(Math.max(accuracy, 30), 500),
-          color: "#2563eb",
-          fillColor: "#3b82f6",
-          fillOpacity: 0.12,
-          weight: 1,
-        }).addTo(locationLayer.current!);
-        L.circleMarker([latitude, longitude], {
-          radius: 7,
-          color: "#ffffff",
-          fillColor: "#2563eb",
-          fillOpacity: 1,
-          weight: 3,
-        })
-          .bindTooltip("You are here", { direction: "top", offset: [0, -8] })
+        const pulseIcon = L.divIcon({
+          html: `<div style="
+            width:24px;height:24px;
+            position:relative;
+            display:flex;align-items:center;justify-content:center;
+          ">
+            <div style="
+              position:absolute;
+              width:24px;height:24px;
+              border-radius:50%;
+              background:#dc262644;
+              animation:pulse-location 1.5s ease-out infinite;
+            "></div>
+            <div style="
+              width:14px;height:14px;
+              border-radius:50%;
+              background:#dc2626;
+              border:2.5px solid white;
+              box-shadow:0 2px 6px rgba(0,0,0,0.2);
+              z-index:1;
+            "></div>
+          </div>`,
+          className: "",
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        });
+        L.marker([latitude, longitude], { icon: pulseIcon })
+          .bindTooltip("You are here", { direction: "top", offset: [0, -10] })
           .addTo(locationLayer.current!);
 
         setIsLocating(false);
-        map.flyTo([latitude, longitude], 16);
+        map.flyTo(offsetForPanel(L.latLng(latitude, longitude), 16), 16);
         setTimeout(() => loadStops(map), 700);
       },
       () => {

@@ -1,5 +1,5 @@
 import sqlite3
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from database import get_connection
 from auth import require_user
@@ -26,6 +26,25 @@ class DelFavBody(BaseModel):
     def validate_stop_code(cls, v: str) -> str:
         if len(v) > 10:
             raise ValueError("Invalid stop code")
+        return v
+
+
+class BusFavBody(BaseModel):
+    stop_code: str
+    bus_no: str
+
+    @field_validator("stop_code")
+    @classmethod
+    def validate_stop_code(cls, v: str) -> str:
+        if len(v) > 10:
+            raise ValueError("Invalid stop code")
+        return v
+
+    @field_validator("bus_no")
+    @classmethod
+    def validate_bus_no(cls, v: str) -> str:
+        if len(v) > 10:
+            raise ValueError("Invalid bus number")
         return v
 
 
@@ -70,3 +89,46 @@ def remove_favourite(body: DelFavBody, user_id: int = Depends(require_user)):
     finally:
         conn.close()
     return {"ok": True, "stop_code": body.stop_code}
+
+
+@router.get("/favourites/buses")
+def get_favourite_buses(stop_code: str = Query(...), user_id: int = Depends(require_user)):
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT bus_no FROM user_favourite_buses WHERE user_id=? AND stop_code=?",
+            (user_id, stop_code),
+        ).fetchall()
+        return {"bus_nos": [r["bus_no"] for r in rows]}
+    finally:
+        conn.close()
+
+
+@router.post("/favourites/bus")
+def add_favourite_bus(body: BusFavBody, user_id: int = Depends(require_user)):
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO user_favourite_buses (user_id, stop_code, bus_no) VALUES (?, ?, ?)",
+            (user_id, body.stop_code, body.bus_no),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Bus favourite already exists")
+    finally:
+        conn.close()
+    return {"ok": True, "stop_code": body.stop_code, "bus_no": body.bus_no}
+
+
+@router.delete("/favourites/bus")
+def remove_favourite_bus(body: BusFavBody, user_id: int = Depends(require_user)):
+    conn = get_connection()
+    try:
+        conn.execute(
+            "DELETE FROM user_favourite_buses WHERE user_id=? AND stop_code=? AND bus_no=?",
+            (user_id, body.stop_code, body.bus_no),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True, "stop_code": body.stop_code, "bus_no": body.bus_no}

@@ -201,6 +201,16 @@ button {
   to { transform: rotate(360deg); }
 }
 
+@keyframes pulse-location {
+  0% { transform: scale(0.4); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes fav-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
 .remove-button:hover {
   background: var(--color-surface-hover);
   color: #dc2626;
@@ -358,6 +368,7 @@ button {
 
 .arrivals-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
@@ -371,15 +382,30 @@ button {
   color: var(--color-text-secondary);
   font-size: 11px;
   font-weight: 800;
-  text-align: left;
   text-transform: uppercase;
 }
+
+.arrivals-table th:nth-child(1),
+.arrivals-table td:nth-child(1) { width: 36px; text-align: center; padding-left: 2px; padding-right: 2px; }
+.arrivals-table th:nth-child(2) { width: 56px; }
+.arrivals-table th:nth-child(3) { width: 64px; text-align: right; }
+.arrivals-table th:nth-child(4) { width: 64px; text-align: right; }
+.arrivals-table th:nth-child(5) { text-align: right; }
 
 .arrivals-table td {
   padding: 12px;
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text);
   font-size: 14px;
+}
+
+.arrivals-table td:nth-child(3),
+.arrivals-table td:nth-child(4) {
+  text-align: right;
+}
+
+.arrivals-table td:nth-child(5) {
+  text-align: right;
 }
 
 .arrivals-table tr:hover td {
@@ -395,6 +421,25 @@ button {
   color: var(--color-text-secondary) !important;
 }
 
+.bus-fav-star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #fbbf24;
+  font-size: 14px;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+}
+
+.bus-fav-star:hover {
+  transform: scale(1.2);
+}
+
+.fav-bus-row td {
+  background: color-mix(in srgb, #fbbf24 6%, transparent);
+}
+
 .map-stage,
 .map-canvas {
   width: 100vw;
@@ -402,8 +447,8 @@ button {
   height: 100dvh;
 }
 
-.leaflet-tile-pane {
-  filter: saturate(0.5);
+.leaflet-control-attribution {
+  display: none !important;
 }
 
 .map-controls {
@@ -580,8 +625,8 @@ button {
   }
 
   .favorites-panel.is-detail {
-    height: 66vh;
-    max-height: 620px;
+    height: 44vh;
+    max-height: 420px;
   }
 
   .favorites-panel.is-expanded {
