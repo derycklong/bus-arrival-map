@@ -7,6 +7,7 @@ DB_PATH = os.path.join(PROJECT_DIR, "data", "bus_stops.db")
 
 
 def get_connection():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -31,6 +32,14 @@ def _migrate_user_favourites(conn):
             CREATE INDEX idx_user_favourites_user ON user_favourites(user_id);
         """)
         conn.commit()
+
+
+def _migrate_users(conn):
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if "email" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    if "mobile_number" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN mobile_number TEXT")
 
 
 def init_db():
@@ -63,6 +72,7 @@ def init_db():
     """)
     conn.commit()
     _migrate_user_favourites(conn)
+    _migrate_users(conn)
     conn.close()
 
 
