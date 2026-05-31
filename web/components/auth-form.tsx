@@ -26,54 +26,6 @@ function normalizeError(err: unknown): string {
   return msg;
 }
 
-const INLINE_STYLES = {
-  page: {
-    background: "var(--color-bg)",
-    color: "var(--color-text)",
-  },
-  card: {
-    background: "var(--color-card)",
-    border: "1px solid var(--color-border)",
-    boxShadow: "0 18px 60px rgba(0,0,0,0.16)",
-  },
-  headerTitle: {
-    color: "var(--color-text)",
-  },
-  subtitle: {
-    color: "var(--color-text-secondary)",
-  },
-  tabActive: {
-    background: "var(--color-accent)",
-    color: "#ffffff",
-  },
-  tabInactive: {
-    background: "var(--color-surface-hover)",
-    color: "var(--color-text-secondary)",
-  },
-  input: {
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border-strong)",
-    color: "var(--color-text)",
-  },
-  inputFocus: {
-    borderColor: "var(--color-accent)",
-  },
-  errorBox: {
-    background: "rgba(220, 38, 38, 0.12)",
-    border: "1px solid rgba(220, 38, 38, 0.4)",
-    color: "var(--color-text)",
-  },
-  submit: {
-    background: "var(--color-accent)",
-    color: "#ffffff",
-  },
-  submitDisabled: {
-    background: "var(--color-accent)",
-    opacity: 0.5,
-    color: "#ffffff",
-  },
-};
-
 export default function AuthForm({ onAuth, sessionExpiredMessage }: AuthFormProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
@@ -142,37 +94,56 @@ export default function AuthForm({ onAuth, sessionExpiredMessage }: AuthFormProp
     : "Save your favorite stops across devices.";
 
   return (
-    <div
-      className="auth-screen fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: "rgba(0,0,0,0.6)" }}
-    >
+    <div className="auth-screen fixed inset-0 z-50 overflow-y-auto" style={{ background: "rgba(0,0,0,0.6)" }}>
       <div className="auth-screen-inner flex items-center justify-center px-4 py-6">
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="w-full max-w-[380px] rounded-2xl p-8 text-center"
-          style={INLINE_STYLES.card}
+          className="w-full max-w-[380px] rounded-2xl p-8 text-center fade-in"
+          style={{
+            background: "var(--color-surface)",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            border: "1px solid var(--color-glass-border)",
+            boxShadow: "0 8px 32px var(--color-glass-shadow)",
+          }}
         >
-          <h1 className="text-xl mb-1 font-bold" style={{ color: "var(--color-text)" }}>
-            Bus Arrival Map
-          </h1>
-          <p className="text-sm mb-2" style={{ color: "var(--color-text-secondary)" }}>
-            derycklong
-          </p>
-          <p className="text-base mb-1 font-medium" style={{ color: "var(--color-text)" }}>
-            {title}
-          </p>
-          <p className="text-sm mb-5" style={{ color: "var(--color-text-secondary)" }}>
-            {subtitle}
-          </p>
+          {/* App branding */}
+          <div className="mb-6">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[var(--color-accent)] mb-3">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="3" width="16" height="16" rx="3"/>
+                <rect x="6" y="5" width="12" height="6" rx="1"/>
+                <circle cx="8" cy="16" r="1.5"/>
+                <circle cx="16" cy="16" r="1.5"/>
+                <line x1="8" y1="19" x2="8" y2="21"/>
+                <line x1="16" y1="19" x2="16" y2="21"/>
+              </svg>
+            </div>
+            <h1 className="text-xl font-bold" style={{ color: "var(--color-text)" }}>Bus Arrival Map</h1>
+            <p className="text-xs mt-1 font-semibold tracking-wider uppercase" style={{ color: "var(--color-text-muted)" }}>
+              derycklong
+            </p>
+          </div>
 
-          <div className="flex mb-4 rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+          {/* Title */}
+          <p className="text-base font-semibold mb-1" style={{ color: "var(--color-text)" }}>{title}</p>
+          <p className="text-sm mb-6" style={{ color: "var(--color-text-secondary)" }}>{subtitle}</p>
+
+          {/* Tabs */}
+          <div
+            className="flex mb-5 rounded-xl overflow-hidden p-1"
+            style={{ background: "var(--color-surface-hover)" }}
+          >
             <button
               type="button"
               aria-pressed={mode === "login"}
               disabled={isLoading}
-              className="flex-1 px-3 py-2 text-sm font-semibold transition-colors"
-              style={mode === "login" ? INLINE_STYLES.tabActive : INLINE_STYLES.tabInactive}
+              className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg transition-all duration-200"
+              style={{
+                background: mode === "login" ? "var(--color-accent)" : "transparent",
+                color: mode === "login" ? "#ffffff" : "var(--color-text-secondary)",
+              }}
               onClick={() => switchMode("login")}
             >
               Login
@@ -181,93 +152,135 @@ export default function AuthForm({ onAuth, sessionExpiredMessage }: AuthFormProp
               type="button"
               aria-pressed={mode === "register"}
               disabled={isLoading}
-              className="flex-1 px-3 py-2 text-sm font-semibold transition-colors"
-              style={mode === "register" ? INLINE_STYLES.tabActive : INLINE_STYLES.tabInactive}
+              className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg transition-all duration-200"
+              style={{
+                background: mode === "register" ? "var(--color-accent)" : "transparent",
+                color: mode === "register" ? "#ffffff" : "var(--color-text-secondary)",
+              }}
               onClick={() => switchMode("register")}
             >
               Register
             </button>
           </div>
 
-          <input
-            className="w-full mb-3 px-3 py-2.5 rounded-lg text-sm outline-none transition-colors"
-            style={INLINE_STYLES.input}
-            placeholder="Username"
-            autoComplete="username"
-            autoCapitalize="none"
-            autoCorrect="off"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            disabled={isLoading}
-          />
-          <input
-            className="w-full mb-3 px-3 py-2.5 rounded-lg text-sm outline-none transition-colors"
-            style={INLINE_STYLES.input}
-            type="password"
-            placeholder="Password"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={isLoading}
-          />
+          {/* Inputs */}
+          <div className="space-y-3">
+            <input
+              className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
+              style={{
+                background: "var(--color-surface-hover)",
+                border: "1px solid var(--color-border-strong)",
+                color: "var(--color-text)",
+              }}
+              placeholder="Username"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              disabled={isLoading}
+              onFocus={(e) => (e.target.style.borderColor = "var(--color-accent)")}
+              onBlur={(e) => (e.target.style.borderColor = "var(--color-border-strong)")}
+            />
+            <input
+              className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
+              style={{
+                background: "var(--color-surface-hover)",
+                border: "1px solid var(--color-border-strong)",
+                color: "var(--color-text)",
+              }}
+              type="password"
+              placeholder="Password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isLoading}
+              onFocus={(e) => (e.target.style.borderColor = "var(--color-accent)")}
+              onBlur={(e) => (e.target.style.borderColor = "var(--color-border-strong)")}
+            />
 
-          {mode === "register" && (
-            <>
-              <input
-                className="w-full mb-3 px-3 py-2.5 rounded-lg text-sm outline-none transition-colors"
-                style={INLINE_STYLES.input}
-                type="email"
-                placeholder="Email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-              />
-              <input
-                className="w-full mb-3 px-3 py-2.5 rounded-lg text-sm outline-none transition-colors"
-                style={INLINE_STYLES.input}
-                type="tel"
-                placeholder="Mobile number (e.g. 91234567)"
-                autoComplete="tel"
-                maxLength={8}
-                value={mobileNumber}
-                onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ""))}
-                disabled={isLoading}
-              />
-            </>
-          )}
+            {mode === "register" && (
+              <div className="space-y-3 slide-up">
+                <input
+                  className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
+                  style={{
+                    background: "var(--color-surface-hover)",
+                    border: "1px solid var(--color-border-strong)",
+                    color: "var(--color-text)",
+                  }}
+                  type="email"
+                  placeholder="Email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
+                  onFocus={(e) => (e.target.style.borderColor = "var(--color-accent)")}
+                  onBlur={(e) => (e.target.style.borderColor = "var(--color-border-strong)")}
+                />
+                <input
+                  className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
+                  style={{
+                    background: "var(--color-surface-hover)",
+                    border: "1px solid var(--color-border-strong)",
+                    color: "var(--color-text)",
+                  }}
+                  type="tel"
+                  placeholder="Mobile number (e.g. 91234567)"
+                  autoComplete="tel"
+                  maxLength={8}
+                  value={mobileNumber}
+                  onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ""))}
+                  disabled={isLoading}
+                  onFocus={(e) => (e.target.style.borderColor = "var(--color-accent)")}
+                  onBlur={(e) => (e.target.style.borderColor = "var(--color-border-strong)")}
+                />
+              </div>
+            )}
+          </div>
 
+          {/* Error */}
           {error && (
             <p
               ref={statusRef}
               tabIndex={-1}
               aria-live="assertive"
-              className="text-sm mb-3 py-3 px-3 rounded-lg outline-none"
-              style={INLINE_STYLES.errorBox}
+              className="text-sm mt-4 py-3 px-4 rounded-xl outline-none fade-in"
+              style={{
+                background: "var(--color-danger-bg)",
+                border: "1px solid var(--color-danger)",
+                color: "var(--color-text)",
+              }}
             >
               {error}
             </p>
           )}
 
+          {/* Loading */}
           {isLoading && (
             <p
               aria-live="polite"
-              className="text-sm mb-3 py-3 px-3 rounded-lg"
+              className="text-sm mt-4 py-3 px-4 rounded-xl fade-in flex items-center justify-center gap-2"
               style={{
-                background: "rgba(37, 99, 235, 0.12)",
-                border: "1px solid rgba(37, 99, 235, 0.4)",
+                background: "rgba(37, 99, 235, 0.1)",
+                border: "1px solid rgba(37, 99, 235, 0.3)",
                 color: "var(--color-text)",
               }}
             >
+              <span className="spinner-modern inline-block" />
               Connecting securely...
             </p>
           )}
 
+          {/* Submit */}
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-2.5 rounded-lg font-semibold text-sm transition-opacity cursor-pointer"
-            style={isLoading ? INLINE_STYLES.submitDisabled : INLINE_STYLES.submit}
+            className="w-full mt-5 py-3 rounded-xl font-semibold text-sm cursor-pointer transition-all duration-200"
+            style={{
+              background: "var(--color-accent)",
+              opacity: isLoading ? 0.5 : 1,
+              color: "#ffffff",
+            }}
           >
             {isLoading
               ? "Please wait..."

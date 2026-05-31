@@ -24,6 +24,8 @@ export default function Home() {
   }, []);
   const [username, setUsername] = useState("");
   const [selectedStop, setSelectedStop] = useState<StopBase | null>(null);
+  const [panelDismissed, setPanelDismissed] = useState(false);
+  const [panelExpanded, setPanelExpanded] = useState(false);
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState("");
 
   const {
@@ -42,24 +44,31 @@ export default function Home() {
     [stops]
   );
 
+  const favouriteStopCodesKey = useMemo(
+    () => stops.map((s) => s.stop.stop_code).join(","),
+    [stops]
+  );
+
   // Check auth on initial mount when token exists
   useEffect(() => {
     if (view !== "spinner") return;
 
+    const fallback = setTimeout(() => setView("auth"), 15000);
+
     getMe()
       .then((user) => {
+        clearTimeout(fallback);
         setUsername(user.username);
         setView("map");
       })
       .catch(() => {
-        try {
-          localStorage.removeItem("token");
-        } catch {
-          /* noop */
-        }
+        clearTimeout(fallback);
+        try { localStorage.removeItem("token"); } catch { /* noop */ }
         setSessionExpiredMessage("Session expired. Please log in again.");
         setView("auth");
       });
+
+    return () => clearTimeout(fallback);
   }, [view]);
 
   // Start/stop favourites polling based on view
@@ -74,7 +83,40 @@ export default function Home() {
     };
   }, [view, startPolling, stopPolling]);
 
-  // Handle session expiry from any API call (token expired mid-session)
+  // Disable back nav on mobile (only in map view)
+  useEffect(() => {
+    if (view !== "map") return;
+
+    window.history.pushState(null, "", window.location.href);
+    window.history.pushState(null, "", window.location.href);
+    function handlePopState() {
+      window.history.pushState(null, "", window.location.href);
+      window.history.pushState(null, "", window.location.href);
+    }
+    window.addEventListener("popstate", handlePopState);
+
+    let touchStartX = 0;
+    function handleTouchStart(e: TouchEvent) {
+      touchStartX = e.touches[0].clientX;
+    }
+    function handleTouchMove(e: TouchEvent) {
+      // Don't block swipes that originate inside the favorites panel
+      const target = e.target as HTMLElement;
+      if (target.closest(".favorites-panel")) return;
+      if (touchStartX < 24 && e.touches[0].clientX - touchStartX > 0) {
+        e.preventDefault();
+      }
+    }
+    document.addEventListener("touchstart", handleTouchStart, { passive: true });
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      document.removeEventListener("touchstart", handleTouchStart);
+      document.removeEventListener("touchmove", handleTouchMove);
+    };
+  }, [view]);
+
   useEffect(() => {
     function handleSessionExpired() {
       stopPolling();
@@ -101,10 +143,18 @@ export default function Home() {
     setSelectedStop(null);
   }
 
+  function handleLogout() {
+    stopPolling();
+    setSelectedStop(null);
+    try { localStorage.removeItem("token"); } catch { /* noop */ }
+    setUsername("");
+    setView("auth");
+  }
+
   if (view === "spinner") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(10,10,30,0.5)]">
-        <div className="w-10 h-10 border-3 border-[#2a3a5c] border-t-[#0a6bff] rounded-full animate-spin" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "var(--color-bg)" }}>
+        <div className="spinner-modern w-10 h-10" style={{ width: 32, height: 32, borderWidth: 3 }} />
       </div>
     );
   }
@@ -120,7 +170,16 @@ export default function Home() {
           <p className="app-kicker">derycklong</p>
           <h1>Bus Arrival Map</h1>
         </div>
-
+        <div className="app-user">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-text-muted)", flexShrink: 0 }}>
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>
+          </svg>
+          <span>{username}</span>
+          <button onClick={handleLogout} title="Log out">
+            Log out
+          </button>
+        </div>
       </header>
       <FavoritesPanel
         stops={stops}
@@ -134,11 +193,16 @@ export default function Home() {
         isFavourite={selectedStop ? favouriteStopCodes.has(selectedStop.stop_code) : false}
         onFavouriteAdd={addFavouriteStop}
         onFavouriteRemove={removeFavouriteStop}
+        onDismissedChange={setPanelDismissed}
+        onExpandedChange={setPanelExpanded}
       />
       <MapView
         favouriteStopCodes={favouriteStopCodes}
+        favouriteStopCodesKey={favouriteStopCodesKey}
         selectedStop={selectedStop}
         onSelectStop={handleSelectStop}
+        panelDismissed={panelDismissed}
+        panelExpanded={panelExpanded}
       />
     </div>
   );

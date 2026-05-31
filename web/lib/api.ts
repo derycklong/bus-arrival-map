@@ -117,6 +117,7 @@ export function getMe() {
 }
 
 export function getStops(lat: number, lng: number, radius: number) {
+  radius = Math.min(Math.max(radius, 50), 2000);
   return api<StopsResponse>("GET", `/stops?lat=${lat}&lng=${lng}&radius=${radius}`);
 }
 

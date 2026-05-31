@@ -47,6 +47,7 @@ export default function Sidebar({
     error: false,
   });
   const [confirmUnfav, setConfirmUnfav] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,9 +61,7 @@ export default function Sidebar({
         if (!cancelled) dispatch({ type: "fetch_error" });
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [stop.stop_code]);
 
   useEffect(() => {
@@ -79,6 +78,21 @@ export default function Sidebar({
     return (a.next?.duration_ms ?? 999999) - (b.next?.duration_ms ?? 999999);
   });
 
+  function handleRefresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    dispatch({ type: "fetch_start" });
+    getArrivals(stop.stop_code)
+      .then((data) => {
+        dispatch({ type: "fetch_success", services: data.services || [] });
+        setRefreshing(false);
+      })
+      .catch(() => {
+        dispatch({ type: "fetch_error" });
+        setRefreshing(false);
+      });
+  }
+
   function handleFavClick() {
     if (isFavourite) {
       setConfirmUnfav(true);
@@ -94,44 +108,72 @@ export default function Sidebar({
 
   return (
     <>
-      <aside className="stop-panel app-panel">
+      <aside
+        className="stop-panel app-panel"
+      >
+        {/* Header */}
         <div className="stop-header">
           <div className="stop-header-copy">
             <div className="stop-title-row">
-              <h2>{stop.name}</h2>
+              <div className="stop-title-text">
+                <h2>{stop.name}</h2>
+              </div>
               <button
                 onClick={handleFavClick}
                 title={isFavourite ? "Remove from Favorites" : "Add to Favorites"}
                 aria-label={isFavourite ? "Remove from Favorites" : "Add to Favorites"}
-                className={`favorite-action ${isFavourite ? "is-favorite" : ""}`}
+                className={"favorite-action" + (isFavourite ? " is-favorite" : "")}
               >
-                {isFavourite ? "⭐ Favorited" : "☆ Favorite"}
+                {isFavourite ? "⭐" : "☆"}
+              </button>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className={"icon-button" + (refreshing ? " is-spinning" : "")}
+                aria-label="Refresh arrivals"
+                title="Refresh arrivals"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+              </button>
+              <button
+                onClick={onClose}
+                className="icon-button"
+                aria-label="Close arrivals"
+              >
+                &times;
               </button>
             </div>
-            <p>{stop.road}</p>
-            <span>Stop {stop.stop_code}</span>
+            <p className="stop-subtitle">
+              {stop.road}
+              <span>Stop {stop.stop_code}</span>
+            </p>
           </div>
-          <button
-            onClick={onClose}
-            className="icon-button"
-            aria-label="Close arrivals"
-          >
-            &times;
-          </button>
         </div>
 
-        {loading && <p className="panel-message">Loading arrivals...</p>}
+        {/* Loading state */}
+        {loading && (
+          <div className="flex-1 flex flex-col gap-3 p-4">
+            {[1,2,3,4,5].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="skeleton w-12 h-5" />
+                <div className="skeleton w-16 h-5" />
+                <div className="skeleton w-16 h-5" />
+                <div className="skeleton flex-1 h-5" />
+              </div>
+            ))}
+          </div>
+        )}
 
+        {/* Error state */}
         {error && (
-          <div className="empty-state">
-            <p className="empty-title text-red-500">Failed to load arrivals</p>
+          <div className="empty-state flex-1">
+            <p className="empty-title" style={{ color: "var(--color-danger)" }}>Failed to load arrivals</p>
             <button
-              onClick={() => {
-                dispatch({ type: "fetch_start" });
-                getArrivals(stop.stop_code)
-                  .then((data) => dispatch({ type: "fetch_success", services: data.services || [] }))
-                  .catch(() => dispatch({ type: "fetch_error" }));
-              }}
+              onClick={handleRefresh}
               className="primary-button"
             >
               Retry
@@ -139,10 +181,12 @@ export default function Sidebar({
           </div>
         )}
 
+        {/* Empty state */}
         {!loading && !error && services.length === 0 && (
-          <p className="panel-message">No bus services at this stop</p>
+          <p className="panel-message flex-1">No bus services at this stop</p>
         )}
 
+        {/* Arrivals table */}
         {!loading && !error && services.length > 0 && (
           <div className="arrivals-table-wrap">
             <table className="arrivals-table">
@@ -156,7 +200,7 @@ export default function Sidebar({
               </thead>
               <tbody>
                 {sorted.map((svc, i) => (
-                  <tr key={`${svc.no}-${svc.operator}-${i}`}>
+                  <tr key={svc.no + "-" + svc.operator + "-" + i}>
                     <td className="bus-number">{svc.no}</td>
                     <td>
                       <DurationText ms={svc.next?.duration_ms ?? null} />
@@ -175,27 +219,28 @@ export default function Sidebar({
         )}
       </aside>
 
+      {/* Unfavourite confirmation modal */}
       {confirmUnfav && (
         <div
           className="fixed inset-0 z-[2000] flex items-center justify-center bg-[rgba(10,10,30,0.85)]"
           onClick={() => setConfirmUnfav(false)}
         >
           <div
-            className="bg-[#16213e] rounded-2xl p-6 shadow-2xl w-[340px] max-w-[90vw]"
+            className="modal-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-white font-semibold text-lg mb-2">Remove from Favorites?</h2>
-            <p className="text-gray-400 text-sm mb-5">Remove {stop.name} from favorites?</p>
-            <div className="flex gap-3">
+            <h2>Remove from Favorites?</h2>
+            <p>Remove {stop.name} from favorites?</p>
+            <div className="modal-actions">
               <button
                 onClick={() => setConfirmUnfav(false)}
-                className="flex-1 py-2 rounded-lg bg-[#0f3460] text-gray-400 text-sm cursor-pointer hover:bg-[#1a4a80]"
+                className="modal-cancel"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmRemove}
-                className="flex-1 py-2 rounded-lg bg-[#ef4444] text-white text-sm font-semibold cursor-pointer hover:bg-[#dc2626]"
+                className="modal-confirm"
               >
                 Remove
               </button>
