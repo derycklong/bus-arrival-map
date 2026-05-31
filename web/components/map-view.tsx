@@ -243,12 +243,14 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
     // Auto-watch location — updates marker silently on position changes
     locationWatchId.current = navigator.geolocation.watchPosition(
       (position) => {
-        updateLocationMarker(position.coords.latitude, position.coords.longitude);
-        if (!lastLocation.current) {
+        const { latitude, longitude } = position.coords;
+        const isFirstFix = !lastLocation.current;
+        updateLocationMarker(latitude, longitude);
+        if (isFirstFix) {
           // First fix: fly and load stops
           const map = mapInstance.current;
           if (map) {
-            map.flyTo(offsetForPanel(L.latLng(position.coords.latitude, position.coords.longitude), 16), 16, { duration: 0.6 });
+            map.flyTo(offsetForPanel(L.latLng(latitude, longitude), 16), 16, { duration: 0.6 });
             setTimeout(() => loadStops(map), 700);
           }
         }
