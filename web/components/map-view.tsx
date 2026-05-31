@@ -105,6 +105,8 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
   const selectedStopRef = useRef(selectedStop);
   const onSelectStopRef = useRef(onSelectStop);
   const favCodesRef = useRef(favouriteStopCodes);
+  const locationWatchId = useRef<number | null>(null);
+  const lastLocation = useRef<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [isLoadingStops, setIsLoadingStops] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -237,7 +239,23 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
     window.addEventListener("resize", refreshMapSize);
 
     loadStops(map);
-    handleUseLocation();
+
+    // Auto-watch location — updates marker silently on position changes
+    locationWatchId.current = navigator.geolocation.watchPosition(
+      (position) => {
+        updateLocationMarker(position.coords.latitude, position.coords.longitude);
+        if (!lastLocation.current) {
+          // First fix: fly and load stops
+          const map = mapInstance.current;
+          if (map) {
+            map.flyTo(offsetForPanel(L.latLng(position.coords.latitude, position.coords.longitude), 16), 16, { duration: 0.6 });
+            setTimeout(() => loadStops(map), 700);
+          }
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
 
     let timer: ReturnType<typeof setTimeout>;
     map.on("moveend", () => {
@@ -257,10 +275,45 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
       window.removeEventListener("orientationchange", refreshMapSize);
       window.removeEventListener("resize", refreshMapSize);
       if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+      if (locationWatchId.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchId.current);
+        locationWatchId.current = null;
+      }
       map.remove();
       mapInstance.current = null;
     };
   }, [loadStops]);
+
+  function updateLocationMarker(lat: number, lng: number) {
+    const map = mapInstance.current;
+    if (!map) return;
+    locationLayer.current?.clearLayers();
+    const pulseIcon = L.divIcon({
+      html: `<div style="
+        width:24px;height:24px;position:relative;
+        display:flex;align-items:center;justify-content:center;
+      ">
+        <div style="
+          position:absolute;width:24px;height:24px;
+          border-radius:50%;
+          background:#dc262644;
+          animation:pulse-location 1.5s ease-out infinite;
+        "></div>
+        <div style="
+          width:14px;height:14px;border-radius:50%;
+          background:#dc2626;border:2.5px solid white;
+          box-shadow:0 2px 6px rgba(0,0,0,0.2);z-index:1;
+        "></div>
+      </div>`,
+      className: "",
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+    });
+    L.marker([lat, lng], { icon: pulseIcon })
+      .bindTooltip("You are here", { direction: "top", offset: [0, -10] })
+      .addTo(locationLayer.current!);
+    lastLocation.current = { lat, lng };
+  }
 
   function handleUseLocation() {
     if (!navigator.geolocation) return;
@@ -271,38 +324,13 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
         const map = mapInstance.current;
         if (!map) return;
 
-        locationLayer.current?.clearLayers();
-        const pulseIcon = L.divIcon({
-          html: `<div style="
-            width:24px;height:24px;position:relative;
-            display:flex;align-items:center;justify-content:center;
-          ">
-            <div style="
-              position:absolute;width:24px;height:24px;
-              border-radius:50%;
-              background:#dc262644;
-              animation:pulse-location 1.5s ease-out infinite;
-            "></div>
-            <div style="
-              width:14px;height:14px;border-radius:50%;
-              background:#dc2626;border:2.5px solid white;
-              box-shadow:0 2px 6px rgba(0,0,0,0.2);z-index:1;
-            "></div>
-          </div>`,
-          className: "",
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
-        });
-        L.marker([latitude, longitude], { icon: pulseIcon })
-          .bindTooltip("You are here", { direction: "top", offset: [0, -10] })
-          .addTo(locationLayer.current!);
-
+        updateLocationMarker(latitude, longitude);
         setIsLocating(false);
         map.flyTo(offsetForPanel(L.latLng(latitude, longitude), 16), 16, { duration: 0.6 });
         setTimeout(() => loadStops(map), 700);
       },
       () => { setIsLocating(false); },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }
 
