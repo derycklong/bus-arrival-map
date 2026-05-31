@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import AuthForm from "@/components/auth-form";
 import { getMe } from "@/lib/api";
@@ -27,6 +27,13 @@ export default function Home() {
   const [panelDismissed, setPanelDismissed] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      return (localStorage.getItem("theme") as "light" | "dark") || "light";
+    } catch {
+      return "light";
+    }
+  });
 
   const {
     stops,
@@ -48,6 +55,19 @@ export default function Home() {
     () => stops.map((s) => s.stop.stop_code).join(","),
     [stops]
   );
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === "light" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem("theme", next); } catch {}
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   // Check auth on initial mount when token exists
   useEffect(() => {
@@ -100,9 +120,9 @@ export default function Home() {
       touchStartX = e.touches[0].clientX;
     }
     function handleTouchMove(e: TouchEvent) {
-      // Don't block swipes that originate inside the favorites panel
+      // Don't block swipes that originate inside the favorites or stop panel
       const target = e.target as HTMLElement;
-      if (target.closest(".favorites-panel")) return;
+      if (target.closest(".favorites-panel") || target.closest(".stop-panel")) return;
       if (touchStartX < 24 && e.touches[0].clientX - touchStartX > 0) {
         e.preventDefault();
       }
@@ -170,7 +190,14 @@ export default function Home() {
           <p className="app-kicker">derycklong</p>
           <h1>Bus Arrival Map</h1>
         </div>
-        <div className="app-user">
+      </header>
+      <div className="app-user">
+          <button onClick={toggleTheme} className="theme-toggle-button" title={"Switch to " + (theme === "dark" ? "light" : "dark") + " mode"} aria-label="Toggle dark/light mode">
+            {theme === "dark"
+              ? <svg key="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f8fafc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+              : <svg key="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            }
+          </button>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-text-muted)", flexShrink: 0 }}>
             <circle cx="12" cy="8" r="4"/>
             <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>
@@ -180,7 +207,6 @@ export default function Home() {
             Log out
           </button>
         </div>
-      </header>
       <FavoritesPanel
         stops={stops}
         loading={favsLoading}
@@ -201,8 +227,7 @@ export default function Home() {
         favouriteStopCodesKey={favouriteStopCodesKey}
         selectedStop={selectedStop}
         onSelectStop={handleSelectStop}
-        panelDismissed={panelDismissed}
-        panelExpanded={panelExpanded}
+        theme={theme}
       />
     </div>
   );

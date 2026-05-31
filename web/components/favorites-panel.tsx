@@ -78,13 +78,15 @@ export default function FavoritesPanel({
   const swipeStartX = useRef(0);
   const swipeCurrentX = useRef(0);
   const swipingHorizontal = useRef(false);
+  const startedInScrollable = useRef(false);
 
-const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
     const scrollable = target.closest(".arrivals-table-wrap, .favorites-list");
     swipeStartX.current = e.touches[0].clientX;
     swipeCurrentX.current = e.touches[0].clientX;
     swipingHorizontal.current = false;
+    startedInScrollable.current = !!scrollable;
     if (scrollable && scrollable.scrollTop > 0) {
       touchStartY.current = -999;
       return;
@@ -104,6 +106,7 @@ const handleTouchStart = useCallback((e: React.TouchEvent) => {
       return;
     }
     if (touchStartY.current === -999 || !isDetailView) return;
+    if (startedInScrollable.current) return;
     if (panelRef.current) {
       if (dy > 0) {
         panelRef.current.style.transform = "translateY(" + dy + "px)";
@@ -172,26 +175,19 @@ const handleTouchStart = useCallback((e: React.TouchEvent) => {
   useEffect(() => {
     const el = panelRef.current;
     if (!el || !isDetailView) return;
-    let startX = swipeStartX.current;
-    let started = false;
-    const onTouchStart = () => {
-      startX = swipeStartX.current;
-      started = false;
-    };
     const preventHorizontalDefault = (e: TouchEvent) => {
       if (!isDetailView) return;
+      // Don't interfere with native scroll when touch started inside a scrollable area
+      if (startedInScrollable.current) return;
       const touch = e.touches[0];
       if (!touch) return;
-      const dx = touch.clientX - startX;
+      const dx = touch.clientX - swipeStartX.current;
       if (Math.abs(dx) > 8) {
         e.preventDefault();
-        started = true;
       }
     };
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", preventHorizontalDefault, { passive: false });
     return () => {
-      el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", preventHorizontalDefault);
     };
   }, [isDetailView]);
@@ -360,7 +356,7 @@ const handleTouchStart = useCallback((e: React.TouchEvent) => {
                   className="icon-button"
                   aria-label="Close stop detail"
                 >
-                  &times;
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </>
             ) : (
@@ -373,6 +369,13 @@ const handleTouchStart = useCallback((e: React.TouchEvent) => {
                   title="Refresh arrivals"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                </button>
+                <button
+                  onClick={() => { setDismissed(true); onDismissedChange?.(true); }}
+                  className="icon-button"
+                  aria-label="Close favorites panel"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </>
             )}
@@ -440,7 +443,9 @@ const handleTouchStart = useCallback((e: React.TouchEvent) => {
                             <svg width="12" height="12" viewBox="0 0 24 24" fill={favBuses.has(svc.no) ? "var(--color-fav)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                           </button>
                         </td>
-                        <td className="bus-number">{svc.no}</td>
+                        <td className="bus-number">
+                            <span className="bus-badge" data-op={svc.operator}>{svc.no}</span>
+                          </td>
                         <td><DurationText ms={svc.next?.duration_ms ?? null} /></td>
                         <td><DurationText ms={svc.subsequent?.duration_ms ?? null} /></td>
                         <td className="destination-code">
@@ -511,14 +516,20 @@ const handleTouchStart = useCallback((e: React.TouchEvent) => {
                           ) : item.error ? (
                             <span style={{ color: "var(--color-danger)" }}>Unavailable</span>
                           ) : item.services.length > 0 ? (
-                            <span>
-                              <DurationText ms={item.services[0].next?.duration_ms ?? null} />
-                              {item.services.length > 1 && (
-                                <span className="arrival-count">
-                                  &middot; {item.services.length} services
+                            (() => {
+                              const sorted = [...item.services].sort((a, b) => (a.next?.duration_ms ?? 999999) - (b.next?.duration_ms ?? 999999));
+                              return (
+                                <span className="next-bus-row">
+                                  <span className="bus-badge" data-op={sorted[0].operator}>{sorted[0].no}</span>
+                                  <DurationText ms={sorted[0].next?.duration_ms ?? null} />
+                                  {sorted.length > 1 && (
+                                    <span className="arrival-count">
+                                      &middot; +{sorted.length - 1}
+                                    </span>
+                                  )}
                                 </span>
-                              )}
-                            </span>
+                              );
+                            })()
                           ) : (
                             <span style={{ color: "var(--color-text-muted)" }}>No services</span>
                           )}
@@ -533,7 +544,7 @@ const handleTouchStart = useCallback((e: React.TouchEvent) => {
                         aria-label={"Remove " + item.stop.name + " from favorites"}
                         className="remove-button"
                       >
-                        &times;
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                       </button>
                     </div>
                   </div>

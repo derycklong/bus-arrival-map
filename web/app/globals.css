@@ -23,23 +23,27 @@
 }
 
 :root[data-theme="dark"] {
-  --color-card: #181a20;
-  --color-border: rgba(255, 255, 255, 0.06);
-  --color-text: #f3f4f6;
-  --color-accent: #60a5fa;
-  --color-bg: #0f1117;
+  /* Night palette */
+  --color-bg: #000000;
   --color-surface: rgba(24, 26, 32, 0.88);
-  --color-surface-hover: #1e2028;
-  --color-text-secondary: #9ca3af;
-  --color-text-muted: #6b7280;
-  --color-border-strong: #374151;
+  --color-surface-hover: rgba(30, 32, 38, 0.92);
   --color-glass-border: rgba(255, 255, 255, 0.08);
-  --color-glass-shadow: rgba(0, 0, 0, 0.3);
-  --color-fav: #fbbf24;
+  --color-glass-shadow: rgba(0, 0, 0, 0.4);
+  --color-text: #f8fafc;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted: #64748b;
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-danger: #ef4444;
+  --color-danger-bg: rgba(239, 68, 68, 0.1);
+  --color-fav: #f59e0b;
   --color-fav-bg: rgba(251, 191, 36, 0.12);
-  --color-success: #34d399;
-  --color-danger: #f87171;
-  --color-danger-bg: rgba(248, 113, 113, 0.12);
+  --color-badge-op-border: rgba(255, 255, 255, 0.18);
+}
+
+:root[data-theme="dark"] body {
+  background-color: #000000;
 }
 
 /* ── Base ────────────────────────────────────────────────────── */
@@ -108,6 +112,10 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .app-user {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1101;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -149,6 +157,33 @@ button { -webkit-tap-highlight-color: transparent; }
   opacity: 0.85;
 }
 
+.app-user button.theme-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 36px;
+  border: 1px solid var(--color-glass-border);
+  border-radius: 10px;
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.app-user button.theme-toggle-button:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.app-user button.theme-toggle-button svg {
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 /* ── Glass panel base ────────────────────────────────────────── */
 
 .app-panel {
@@ -156,6 +191,7 @@ button { -webkit-tap-highlight-color: transparent; }
   z-index: 1000;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.5);
   background: rgba(255, 255, 255, 0.7);
   -webkit-backdrop-filter: blur(18px);
@@ -217,7 +253,6 @@ button { -webkit-tap-highlight-color: transparent; }
   background: var(--color-surface-hover);
   color: var(--color-text-secondary);
   cursor: pointer;
-  font-size: 18px;
   transition: all 0.15s ease;
 }
 
@@ -250,11 +285,13 @@ button { -webkit-tap-highlight-color: transparent; }
   transform: scale(0.92);
 }
 
+button.icon-button[aria-label="Close favorites panel"] { display: none; }
+
 .favorite-action:active {
   transform: scale(0.95);
 }
 
-.map-control-button:active {
+.map-locate-button:active {
   transform: scale(0.92) !important;
 }
 
@@ -307,6 +344,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .arrivals-table-wrap {
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -322,15 +360,12 @@ button { -webkit-tap-highlight-color: transparent; }
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.favorite-row:hover,
-.favorite-row:focus-visible {
-  background: var(--color-fav-bg);
-  box-shadow: inset 0 0 0 1px var(--color-fav);
-}
-
-.favorite-row.is-selected {
-  border-left-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+@media (hover: hover) {
+  .favorite-row:hover,
+  .favorite-row:focus-visible {
+    background: var(--color-fav-bg);
+    box-shadow: inset 0 0 0 1px var(--color-fav);
+  }
 }
 
 .favorite-row-main {
@@ -373,10 +408,40 @@ button { -webkit-tap-highlight-color: transparent; }
   font-weight: 600;
 }
 
+.next-bus-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bus-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: white;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+}
+
+.bus-badge[data-op="SBST"] { background: rgba(139, 92, 246, 0.85); }
+.bus-badge[data-op="SMRT"] { background: rgba(239, 68, 68, 0.85); }
+.bus-badge[data-op="TTS"]   { background: rgba(34, 197, 94, 0.85); }
+.bus-badge[data-op="GAS"]  { background: rgba(245, 158, 11, 0.85); }
+.bus-badge[data-op=""]     { background: var(--color-accent); }
+
+.next-bus-row .bus-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
 .arrival-count {
   color: var(--color-text-muted);
   font-size: 11px;
-  margin-left: 2px;
+  font-weight: 500;
 }
 
 /* ── Arrivals table ──────────────────────────────────────────── */
@@ -496,6 +561,7 @@ button { -webkit-tap-highlight-color: transparent; }
   border-radius: 18px;
   animation: slideInRight 0.25s ease-out;
   overscroll-behavior-x: contain;
+  touch-action: pan-y;
 }
 
 @keyframes slideInRight {
@@ -530,6 +596,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .favorite-action {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   padding: 6px 12px;
   border: 1px solid var(--color-border-strong);
@@ -543,6 +610,13 @@ button { -webkit-tap-highlight-color: transparent; }
   height: 36px;
   min-height: 36px;
   transition: all 0.15s ease;
+}
+
+.panel-header .favorite-action {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 10px;
 }
 
 .favorite-action:hover {
@@ -585,8 +659,9 @@ button { -webkit-tap-highlight-color: transparent; }
 /* ── Map ─────────────────────────────────────────────────────── */
 
 .map-stage {
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   position: relative;
 }
 
@@ -595,25 +670,15 @@ button { -webkit-tap-highlight-color: transparent; }
   height: 100%;
 }
 
-.leaflet-pane { z-index: 900; }
-
-.map-controls {
+.map-locate-button {
   position: fixed;
   z-index: 1100;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   right: 16px;
   bottom: 16px;
-  transition: bottom 0.3s ease;
-}
-
-.map-controls.is-above-panel { bottom: 16px; }
-
-.map-control-button {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  padding: 12px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -627,27 +692,26 @@ button { -webkit-tap-highlight-color: transparent; }
   transition: all 0.2s ease;
 }
 
-.map-control-button:hover {
+.map-locate-button svg {
+  width: 26px;
+  height: 26px;
+}
+
+.map-locate-button:hover {
   transform: scale(1.05);
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
 
-.map-control-button:disabled {
+.map-locate-button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   transform: none;
 }
 
-/* ── Map tile fix ────────────────────────────────────────────── */
-
-.leaflet-tile {
-  outline: none !important;
-  border: none !important;
-}
-
-.leaflet-container img.leaflet-tile {
-  image-rendering: auto;
+.map-locate-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 /* ── Map loading indicator ───────────────────────────────────── */
@@ -808,8 +872,7 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .icon-button:focus-visible,
 .remove-button:focus-visible,
-.favorite-action:focus-visible,
-.map-control-button:focus-visible {
+.favorite-action:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
@@ -836,10 +899,6 @@ button { -webkit-tap-highlight-color: transparent; }
   .favorite-row, .favorite-action,
   .icon-button, .remove-button {
     transition: none !important;
-  }
-
-  .map-control-button:hover {
-    transform: none !important;
   }
 
   .stop-panel {
@@ -955,19 +1014,19 @@ button { -webkit-tap-highlight-color: transparent; }
   .stop-title-text h2 { font-size: 14px; }
   .stop-subtitle { font-size: 10px; }
   .icon-button { width: 32px; min-width: 32px; height: 32px; }
+  .remove-button { width: 32px; min-width: 32px; height: 32px; }
+  .panel-header .favorite-action { width: 32px; min-width: 32px; height: 32px; padding: 0; }
+  button.icon-button[aria-label="Close favorites panel"] { display: inline-flex; }
   .favorite-action { min-height: 30px; padding: 0 8px; font-size: 11px; }
-
-  .map-controls {
-    bottom: calc(min(44vh, 420px) + 16px);
+  .map-locate-button {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
     right: 10px;
-    transition: bottom 0.3s ease;
+    bottom: max(10px, env(safe-area-inset-bottom));
   }
 
-  .map-controls.is-dismissed { bottom: max(10px, env(safe-area-inset-bottom)); }
-
-  .map-controls.is-expanded {
-    bottom: calc(min(85vh, 800px) + 16px);
-  }
+  .map-locate-button svg { width: 22px; height: 22px; }
 
   .panel-drag-handle {
     display: flex;

@@ -6,8 +6,8 @@ import "leaflet/dist/leaflet.css";
 import { getStops, Stop, StopBase } from "@/lib/api";
 
 const SG_CENTER: [number, number] = [1.3521, 103.8198];
-
 const LIGHT_TILES = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
 const DARK_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 
 /* --- Modern bus stop marker --- */
@@ -73,23 +73,14 @@ function panelCenter(center: L.LatLng, zoom: number): L.LatLng {
 
 /* --- Icons --- */
 
-const SunIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="4"/>
-    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-  </svg>
-);
-
-const MoonIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-  </svg>
-);
-
 const LocateIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="3"/>
-    <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+    <circle cx="12" cy="12" r="3" fill="currentColor"/>
+    <circle cx="12" cy="12" r="8"/>
+    <line x1="12" y1="1" x2="12" y2="4"/>
+    <line x1="12" y1="20" x2="12" y2="23"/>
+    <line x1="1" y1="12" x2="4" y2="12"/>
+    <line x1="20" y1="12" x2="23" y2="12"/>
   </svg>
 );
 
@@ -100,11 +91,10 @@ interface MapViewProps {
   favouriteStopCodesKey: string;
   selectedStop: StopBase | null;
   onSelectStop: (stop: StopBase) => void;
-  panelDismissed?: boolean;
-  panelExpanded?: boolean;
+  theme: "light" | "dark";
 }
 
-export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, selectedStop, onSelectStop, panelDismissed, panelExpanded }: MapViewProps) {
+export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, selectedStop, onSelectStop, theme }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -119,13 +109,6 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
   const [isLoadingStops, setIsLoadingStops] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    try {
-      return (localStorage.getItem("theme") as "light" | "dark") || "light";
-    } catch {
-      return "light";
-    }
-  });
 
   useEffect(() => {
     selectedStopRef.current = selectedStop;
@@ -133,26 +116,21 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
     favCodesRef.current = favouriteStopCodes;
   });
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => {
-      const next = prev === "light" ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", next);
-      try { localStorage.setItem("theme", next); } catch {}
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
-
   useEffect(() => {
     if (!mapInstance.current) return;
     if (tileLayerRef.current) {
       mapInstance.current.removeLayer(tileLayerRef.current);
     }
     const tileUrl = theme === "dark" ? DARK_TILES : LIGHT_TILES;
-    tileLayerRef.current = L.tileLayer(tileUrl, { maxZoom: 19 }).addTo(mapInstance.current);
+    tileLayerRef.current = L.tileLayer(tileUrl, { maxZoom: 19, keepBuffer: 4 }).addTo(mapInstance.current);
+    const bg = theme === "dark" ? "#000000" : "#f2efec";
+    mapInstance.current.getContainer().style.background = bg;
+    const tilePane = mapInstance.current.getPane("tilePane");
+    if (tilePane) tilePane.style.background = bg;
+    // Force Safari to re-rasterize after tile layer swap
+    requestAnimationFrame(() => {
+      mapInstance.current?.invalidateSize({ pan: false });
+    });
   }, [theme]);
 
   const renderStops = useCallback((stops: Stop[], map: L.Map, selectedCode: string | null, favCodes: Set<string>) => {
@@ -233,11 +211,30 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
     });
 
     const tileUrl = theme === "dark" ? DARK_TILES : LIGHT_TILES;
-    tileLayerRef.current = L.tileLayer(tileUrl, { maxZoom: 19 }).addTo(map);
+    tileLayerRef.current = L.tileLayer(tileUrl, { maxZoom: 19, keepBuffer: 4 }).addTo(map);
 
     markersLayer.current = L.layerGroup().addTo(map);
     locationLayer.current = L.layerGroup().addTo(map);
     mapInstance.current = map;
+
+    map.getContainer().style.background = theme === "dark" ? "#000000" : "#f2efec";
+    const tilePane = map.getPane("tilePane");
+    if (tilePane) tilePane.style.background = theme === "dark" ? "#000000" : "#f2efec";
+
+    const container = map.getContainer();
+    let disposed = false;
+    const refreshMapSize = () => {
+      requestAnimationFrame(() => {
+        if (disposed || !container.isConnected) return;
+        try { map.invalidateSize({ pan: false }); } catch {}
+      });
+    };
+    const observer = new ResizeObserver(() => refreshMapSize());
+    observer.observe(container);
+    refreshMapSize();
+    const settleTimer = window.setTimeout(refreshMapSize, 300);
+    window.addEventListener("orientationchange", refreshMapSize);
+    window.addEventListener("resize", refreshMapSize);
 
     loadStops(map);
     handleUseLocation();
@@ -254,6 +251,11 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
     });
 
     return () => {
+      disposed = true;
+      observer.disconnect();
+      window.clearTimeout(settleTimer);
+      window.removeEventListener("orientationchange", refreshMapSize);
+      window.removeEventListener("resize", refreshMapSize);
       if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
       map.remove();
       mapInstance.current = null;
@@ -354,27 +356,16 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
           </button>
         </div>
       )}
-      <div className={"map-controls" + (panelDismissed ? " is-dismissed" : panelExpanded ? " is-expanded" : " is-above-panel")}>
-        <button
-          type="button"
-          onClick={toggleTheme}
-          className="map-control-button"
-          aria-label="Toggle dark/light mode"
-          title={"Switch to " + (theme === "dark" ? "light" : "dark") + " mode"}
-        >
-          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-        </button>
-        <button
-          type="button"
-          onClick={handleUseLocation}
-          disabled={isLocating}
-          className="map-control-button"
-          aria-label="Go to my current location"
-          title="Go to current location"
-        >
-          <LocateIcon />
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={handleUseLocation}
+        disabled={isLocating}
+        className="map-locate-button"
+        aria-label="Go to my current location"
+        title="Go to current location"
+      >
+        <LocateIcon />
+      </button>
     </div>
   );
 }

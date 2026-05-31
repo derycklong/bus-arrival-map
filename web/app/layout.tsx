@@ -8,6 +8,13 @@ export const metadata: Metadata = {
   title: "Bus Arrival Map",
   description: "Singapore bus arrival times on a map",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icons/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: "/icons/icon.svg",
+  },
 };
 
 export const viewport: Viewport = {

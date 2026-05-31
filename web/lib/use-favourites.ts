@@ -99,6 +99,15 @@ export function useFavourites() {
       setState((prev) => ({ ...prev, stops: [...prev.stops, optimistic] }));
       try {
         await addFavourite(stop.stop_code);
+        const arrivals = await getArrivals(stop.stop_code);
+        setState((prev) => ({
+          ...prev,
+          stops: prev.stops.map((s) =>
+            s.stop.stop_code === stop.stop_code
+              ? { ...s, services: arrivals.services, loading: false, error: false }
+              : s
+          ),
+        }));
       } catch {
         setState((prev) => ({
           ...prev,
