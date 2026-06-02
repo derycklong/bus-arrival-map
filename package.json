@@ -1,6 +1,9 @@
 {
+  "private": true,
+  "scripts": {
+    "test:e2e": "node test.mjs"
+  },
   "dependencies": {
-    "playwright": "^1.60.0",
     "puppeteer": "^25.1.0"
   }
 }

@@ -1,8 +1,15 @@
 import json
+import os
 import sqlite3
 import sys
-import os
 from urllib.request import Request, urlopen
+
+# Ensure backend/ is on sys.path so env_config resolves when this file is
+# run as `python -m backend.setup_db` from the project root.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Load .env via shared helper (side-effect import)
+import env_config  # noqa: E402, F401
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
@@ -13,18 +20,7 @@ PAGE_SIZE = 500
 
 
 def _load_account_key():
-    for env_path in [
-        os.path.expanduser("~/.openclaw/.env"),
-        os.path.join(PROJECT_DIR, "data", ".env"),
-        os.path.join(PROJECT_DIR, "data", ".env"),
-    ]:
-        if os.path.exists(env_path):
-            with open(env_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("LTA_DATAMALL_ACCOUNT_KEY=") and "=" in line:
-                        return line.split("=", 1)[1].strip()
-    return os.environ.get("LTA_DATAMALL_ACCOUNT_KEY")
+    return env_config.get_lta_account_key()
 
 
 def download_stops():

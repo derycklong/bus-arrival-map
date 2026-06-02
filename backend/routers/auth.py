@@ -59,20 +59,21 @@ class RegisterBody(AuthBody):
 def register(body: RegisterBody):
     try:
         conn = get_connection()
-        existing = conn.execute("SELECT id FROM users WHERE username=?", (body.username,)).fetchone()
-        if existing:
-            conn.close()
-            raise HTTPException(status_code=400, detail="Registration failed")
+        try:
+            existing = conn.execute("SELECT id FROM users WHERE username=?", (body.username,)).fetchone()
+            if existing:
+                raise HTTPException(status_code=409, detail="Username already taken")
 
-        pw_hash = hash_password(body.password)
-        cur = conn.execute(
-            "INSERT INTO users (username, password_hash, email, mobile_number) VALUES (?, ?, ?, ?)",
-            (body.username, pw_hash, body.email, body.mobile_number),
-        )
-        conn.commit()
-        user_id = cur.lastrowid
+            pw_hash = hash_password(body.password)
+            cur = conn.execute(
+                "INSERT INTO users (username, password_hash, email, mobile_number) VALUES (?, ?, ?, ?)",
+                (body.username, pw_hash, body.email, body.mobile_number),
+            )
+            conn.commit()
+            user_id = cur.lastrowid
+        finally:
+            conn.close()
         token = create_token(user_id)
-        conn.close()
         return {"token": token, "user": {"id": user_id, "username": body.username}}
     except HTTPException:
         raise

@@ -2,16 +2,16 @@ import os
 import sys
 import logging
 import threading
+from contextlib import asynccontextmanager
 from datetime import datetime, time, timedelta
-from dotenv import load_dotenv
 
-# Load environment variables from data/.env
-dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", ".env")
-if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path)
-
-# Add backend dir to path
+# Ensure backend/ is on sys.path so sibling modules (env_config, database,
+# routers, setup_db) resolve when this file is the entry point
+# (e.g. `python -m uvicorn backend.main:app`).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Load environment variables from data/.env (side-effect import)
+import env_config  # noqa: E402, F401
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,29 +27,15 @@ from setup_db import download_stops, create_db, populate_db
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Bus Arrival Map")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(auth.router)
-app.include_router(stops.router)
-app.include_router(favourites.router)
-
 
 def refresh_bus_stops():
     try:
         logger.info("Refreshing bus stop data from LTA DataMall...")
-        stops = download_stops()
+        rows = download_stops()
         conn = create_db()
-        populate_db(conn, stops)
+        populate_db(conn, rows)
         conn.close()
-        logger.info(f"Bus stop data refreshed: {len(stops)} stops")
+        logger.info(f"Bus stop data refreshed: {len(rows)} stops")
     except Exception:
         logger.exception("Failed to refresh bus stops")
 
@@ -71,21 +57,42 @@ def schedule_daily_refresh():
     logger.info(f"Next bus stop refresh scheduled at {target.strftime('%Y-%m-%d %H:%M')}")
 
 
-@app.on_event("startup")
-def startup():
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
     init_db()
     conn = get_connection()
-    count = conn.execute("SELECT COUNT(*) as c FROM bus_stops").fetchone()["c"]
-    conn.close()
+    try:
+        count = conn.execute("SELECT COUNT(*) as c FROM bus_stops").fetchone()["c"]
+    finally:
+        conn.close()
     if count == 0:
         logger.warning("Bus stops table is empty. Refreshing now...")
         refresh_bus_stops()
     else:
         logger.info(f"Database has {count} bus stops.")
     schedule_daily_refresh()
+    yield
 
 
-# Serve frontend static files
-frontend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend")
-if os.path.exists(frontend_dir):
-    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+app = FastAPI(title="Bus Arrival Map", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router)
+app.include_router(stops.router)
+app.include_router(favourites.router)
+
+# Serve frontend static export (Docker build) if it exists
+_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_frontend_dir = os.path.join(_project_dir, "web", "out")
+if not os.path.isdir(_frontend_dir):
+    _frontend_dir = os.path.join(_project_dir, "frontend")
+if os.path.isdir(_frontend_dir):
+    app.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="frontend")
+    logger.info(f"Serving frontend from {_frontend_dir}")

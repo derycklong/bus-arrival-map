@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import ServiceWorkerRegister from "@/components/service-worker-register";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -34,17 +35,7 @@ export default function RootLayout({
     <html lang="en" className={`h-full ${inter.className}`}>
       <body className="m-0 p-0 h-full overflow-hidden">
         {children}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ("serviceWorker" in navigator) {
-                window.addEventListener("load", () => {
-                  navigator.serviceWorker.register("/sw.js");
-                });
-              }
-            `,
-          }}
-        />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

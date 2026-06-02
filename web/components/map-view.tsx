@@ -12,39 +12,30 @@ const DARK_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.pn
 
 /* --- Modern bus stop marker --- */
 
-function createStopIcon(color: string, isSelected: boolean, isFav: boolean) {
+function lighten(hex: string, amount: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  const toHex = (c: number) => Math.max(0, Math.min(255, c)).toString(16).padStart(2, "0");
+  return "#" + toHex(mix(r)) + toHex(mix(g)) + toHex(mix(b));
+}
+
+function createStopIcon(color: string, colorTop: string, isSelected: boolean, isFav: boolean) {
   const outer = isSelected ? 38 : 30;
   const inner = isSelected ? 28 : 22;
   const iconSize = isSelected ? 16 : 13;
-  const glow = isFav
-    ? "0 0 0 4px " + color + "33, 0 0 0 8px " + color + "11,"
-    : "";
-  const shadow = glow + " 0 2px 8px rgba(0,0,0,0.18)";
+  const cls = "stop-marker" + (isSelected ? " is-selected" : "") + (isFav ? " is-fav" : "");
 
   return L.divIcon({
-    html: `<div style="
-      width:${outer}px;height:${outer}px;
-      display:flex;align-items:center;justify-content:center;
-      transition:transform 0.2s ease;
-      pointer-events:auto;
-    ">
-      <div style="
-        width:${inner}px;height:${inner}px;
-        border-radius:50%;
-        background:${color};
-        border:2.5px solid white;
-        box-shadow:${shadow};
-        display:flex;align-items:center;justify-content:center;
-        transition:all 0.2s ease;
-        ${isFav ? "animation:favGlow 2s ease-in-out infinite;" : ""}
-      ">
-        <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="3" width="16" height="16" rx="3"/>
-          <rect x="6" y="5" width="12" height="6" rx="1"/>
-          <circle cx="8" cy="16" r="1.5"/>
-          <circle cx="16" cy="16" r="1.5"/>
-          <line x1="8" y1="19" x2="8" y2="21"/>
-          <line x1="16" y1="19" x2="16" y2="21"/>
+    html: `<div class="stop-marker-wrap" style="width:${outer}px;height:${outer}px;">
+      <div class="${cls}" style="width:${inner}px;height:${inner}px;--mk-base:${color};--mk-top:${colorTop};">
+        <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="13" rx="3" fill="#fff"/>
+          <rect x="5" y="5.5" width="14" height="4" rx="1" fill="#1f2937"/>
+          <circle cx="8" cy="17" r="2.2" fill="#1f2937"/>
+          <circle cx="16" cy="17" r="2.2" fill="#1f2937"/>
         </svg>
       </div>
     </div>`,
@@ -88,13 +79,13 @@ const LocateIcon = () => (
 
 interface MapViewProps {
   favouriteStopCodes: Set<string>;
-  favouriteStopCodesKey: string;
   selectedStop: StopBase | null;
   onSelectStop: (stop: StopBase) => void;
+  onLocationChange?: (loc: { lat: number; lng: number }) => void;
   theme: "light" | "dark";
 }
 
-export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, selectedStop, onSelectStop, theme }: MapViewProps) {
+export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop, onLocationChange, theme }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -107,7 +98,10 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
   const favCodesRef = useRef(favouriteStopCodes);
   const locationWatchId = useRef<number | null>(null);
   const lastLocation = useRef<{ lat: number; lng: number } | null>(null);
+  const themeRef = useRef(theme);
+  const onLocationChangeRef = useRef(onLocationChange);
   const [isLocating, setIsLocating] = useState(false);
+  const [geolocationDenied, setGeolocationDenied] = useState(false);
   const [isLoadingStops, setIsLoadingStops] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -116,6 +110,8 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
     selectedStopRef.current = selectedStop;
     onSelectStopRef.current = onSelectStop;
     favCodesRef.current = favouriteStopCodes;
+    themeRef.current = theme;
+    onLocationChangeRef.current = onLocationChange;
   });
 
   useEffect(() => {
@@ -139,20 +135,21 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
     markersLayer.current?.clearLayers();
     currentStops.current = stops;
 
-    const stopColor = (theme: string) => theme === "dark" ? "#60a5fa" : "#2563eb";
+    const stopColor = theme === "dark" ? "#60a5fa" : "#2563eb";
     const selectedColor = "#ef4444";
     const favColor = "#f59e0b";
 
     for (const stop of stops) {
       const isSelected = stop.stop_code === selectedCode;
       const isFav = favCodes.has(stop.stop_code);
-      const color = isSelected ? selectedColor : isFav ? favColor : stopColor(theme);
-      const icon = createStopIcon(color, isSelected, isFav);
+      const color = isSelected ? selectedColor : isFav ? favColor : stopColor;
+      const colorTop = lighten(color, 0.35);
+      const icon = createStopIcon(color, colorTop, isSelected, isFav);
       const marker = L.marker([stop.lat, stop.lng], { icon });
       marker.on("click", () => onSelectStopRef.current(stop));
       markersLayer.current?.addLayer(marker);
     }
-  }, []);
+  }, [theme]);
 
   const loadStops = useCallback((map: L.Map) => {
     setLoadError(false);
@@ -185,7 +182,13 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
   }, [renderStops]);
 
   useEffect(() => {
-    if (!selectedStop || !mapInstance.current) return;
+    if (!mapInstance.current) return;
+
+    if (!selectedStop) {
+      // Stop was deselected — clear marker so the same stop can re-trigger flyTo
+      prevSelectedCode.current = null;
+      return;
+    }
     if (prevSelectedCode.current === selectedStop.stop_code) return;
     prevSelectedCode.current = selectedStop.stop_code;
     const currentZoom = mapInstance.current.getZoom();
@@ -200,7 +203,7 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
   useEffect(() => {
     if (!mapInstance.current) return;
     renderStops(currentStops.current, mapInstance.current, selectedStop?.stop_code ?? null, favouriteStopCodes);
-  }, [favouriteStopCodes, favouriteStopCodesKey, selectedStop?.stop_code, renderStops]);
+  }, [favouriteStopCodes, selectedStop?.stop_code, renderStops]);
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
@@ -212,16 +215,16 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
       attributionControl: false,
     });
 
-    const tileUrl = theme === "dark" ? DARK_TILES : LIGHT_TILES;
+    const tileUrl = themeRef.current === "dark" ? DARK_TILES : LIGHT_TILES;
     tileLayerRef.current = L.tileLayer(tileUrl, { maxZoom: 19, keepBuffer: 4 }).addTo(map);
 
     markersLayer.current = L.layerGroup().addTo(map);
     locationLayer.current = L.layerGroup().addTo(map);
     mapInstance.current = map;
 
-    map.getContainer().style.background = theme === "dark" ? "#000000" : "#f2efec";
+    map.getContainer().style.background = themeRef.current === "dark" ? "#000000" : "#f2efec";
     const tilePane = map.getPane("tilePane");
-    if (tilePane) tilePane.style.background = theme === "dark" ? "#000000" : "#f2efec";
+    if (tilePane) tilePane.style.background = themeRef.current === "dark" ? "#000000" : "#f2efec";
 
     const container = map.getContainer();
     let disposed = false;
@@ -241,23 +244,31 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
     loadStops(map);
 
     // Auto-watch location — updates marker silently on position changes
-    locationWatchId.current = navigator.geolocation.watchPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        const isFirstFix = !lastLocation.current;
-        updateLocationMarker(latitude, longitude);
-        if (isFirstFix) {
-          // First fix: fly and load stops
-          const map = mapInstance.current;
-          if (map) {
-            map.flyTo(offsetForPanel(L.latLng(latitude, longitude), 16), 16, { duration: 0.6 });
-            setTimeout(() => loadStops(map), 700);
+    if (navigator.geolocation) {
+      locationWatchId.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const isFirstFix = !lastLocation.current;
+          updateLocationMarker(latitude, longitude);
+          if (isFirstFix) {
+            // First fix: fly and load stops
+            const map = mapInstance.current;
+            if (map) {
+              map.flyTo(offsetForPanel(L.latLng(latitude, longitude), 16), 16, { duration: 0.6 });
+              setTimeout(() => loadStops(map), 700);
+            }
           }
-        }
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 5000 }
-    );
+        },
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) {
+            setGeolocationDenied(true);
+          }
+        },
+        { enableHighAccuracy: true, maximumAge: 5000 }
+      );
+    } else {
+      setGeolocationDenied(true);
+    }
 
     let timer: ReturnType<typeof setTimeout>;
     map.on("moveend", () => {
@@ -315,10 +326,11 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
       .bindTooltip("You are here", { direction: "top", offset: [0, -10] })
       .addTo(locationLayer.current!);
     lastLocation.current = { lat, lng };
+    onLocationChangeRef.current?.({ lat, lng });
   }
 
   function handleUseLocation() {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation || geolocationDenied) return;
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -331,7 +343,10 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
         map.flyTo(offsetForPanel(L.latLng(latitude, longitude), 16), 16, { duration: 0.6 });
         setTimeout(() => loadStops(map), 700);
       },
-      () => { setIsLocating(false); },
+      (err) => {
+        setIsLocating(false);
+        if (err.code === err.PERMISSION_DENIED) setGeolocationDenied(true);
+      },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }
@@ -389,10 +404,10 @@ export default function MapView({ favouriteStopCodes, favouriteStopCodesKey, sel
       <button
         type="button"
         onClick={handleUseLocation}
-        disabled={isLocating}
+        disabled={isLocating || geolocationDenied}
         className="map-locate-button"
         aria-label="Go to my current location"
-        title="Go to current location"
+        title={geolocationDenied ? "Location permission denied" : "Go to current location"}
       >
         <LocateIcon />
       </button>

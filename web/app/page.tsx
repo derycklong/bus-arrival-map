@@ -11,29 +11,18 @@ const MapView = dynamic(() => import("@/components/map-view"), { ssr: false });
 const FavoritesPanel = dynamic(() => import("@/components/favorites-panel"), { ssr: false });
 
 export default function Home() {
+  // Initial values must be deterministic on both server and client to avoid
+  // hydration mismatches. localStorage is read after mount in the effect below.
   const [view, setView] = useState<"auth" | "map" | "spinner">("spinner");
-
-  useEffect(() => {
-    try {
-      if (!localStorage.getItem("token")) {
-        setView("auth");
-      }
-    } catch {
-      setView("auth");
-    }
-  }, []);
   const [username, setUsername] = useState("");
   const [selectedStop, setSelectedStop] = useState<StopBase | null>(null);
-  const [panelDismissed, setPanelDismissed] = useState(false);
-  const [panelExpanded, setPanelExpanded] = useState(false);
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState("");
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    try {
-      return (localStorage.getItem("theme") as "light" | "dark") || "light";
-    } catch {
-      return "light";
-    }
-  });
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  const handleLocationChange = useCallback((loc: { lat: number; lng: number }) => {
+    setUserLocation(loc);
+  }, []);
 
   const {
     stops,
@@ -51,15 +40,9 @@ export default function Home() {
     [stops]
   );
 
-  const favouriteStopCodesKey = useMemo(
-    () => stops.map((s) => s.stop.stop_code).join(","),
-    [stops]
-  );
-
   const toggleTheme = useCallback(() => {
     setTheme((prev) => {
       const next = prev === "light" ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", next);
       try { localStorage.setItem("theme", next); } catch {}
       return next;
     });
@@ -69,27 +52,57 @@ export default function Home() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Check auth on initial mount when token exists
+  // Initialize: hydrate theme + token state from localStorage, then validate
+  // the token with the server. Runs once on mount.
   useEffect(() => {
-    if (view !== "spinner") return;
+    // 1. Restore theme preference (client-only, post-mount)
+    try {
+      const stored = localStorage.getItem("theme") as "light" | "dark" | null;
+      if (stored === "dark") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-hydration sync from localStorage
+        setTheme("dark");
+      }
+    } catch { /* noop */ }
 
-    const fallback = setTimeout(() => setView("auth"), 15000);
+    // 2. Check for a stored token. If absent, go straight to auth.
+    let token: string | null = null;
+    try {
+      token = localStorage.getItem("token");
+    } catch { /* noop */ }
+    if (!token) {
+      setView("auth");
+      return;
+    }
+
+    // 3. Validate the token with the server.
+    let cancelled = false;
+    const fallback = setTimeout(() => {
+      if (cancelled) return;
+      try { localStorage.removeItem("token"); } catch { /* noop */ }
+      setSessionExpiredMessage("Could not reach server. Please log in again.");
+      setView("auth");
+    }, 5000);
 
     getMe()
       .then((user) => {
+        if (cancelled) return;
         clearTimeout(fallback);
         setUsername(user.username);
         setView("map");
       })
       .catch(() => {
+        if (cancelled) return;
         clearTimeout(fallback);
         try { localStorage.removeItem("token"); } catch { /* noop */ }
         setSessionExpiredMessage("Session expired. Please log in again.");
         setView("auth");
       });
 
-    return () => clearTimeout(fallback);
-  }, [view]);
+    return () => {
+      cancelled = true;
+      clearTimeout(fallback);
+    };
+  }, []);
 
   // Start/stop favourites polling based on view
   useEffect(() => {
@@ -107,33 +120,28 @@ export default function Home() {
   useEffect(() => {
     if (view !== "map") return;
 
-    window.history.pushState(null, "", window.location.href);
-    window.history.pushState(null, "", window.location.href);
-    function handlePopState() {
-      window.history.pushState(null, "", window.location.href);
-      window.history.pushState(null, "", window.location.href);
-    }
-    window.addEventListener("popstate", handlePopState);
+    // Keep exactly 1 history entry — iOS disables edge-swipe when history length is 1
+    window.history.replaceState(null, "", window.location.href);
+    document.body.classList.add("no-swipe-back");
 
-    let touchStartX = 0;
+    // Block iOS edge-swipe navigation gestures
+    const root = document.querySelector("div.app-shell") || document.body.firstElementChild;
     function handleTouchStart(e: TouchEvent) {
-      touchStartX = e.touches[0].clientX;
-    }
-    function handleTouchMove(e: TouchEvent) {
-      // Don't block swipes that originate inside the favorites or stop panel
+      const x = e.touches[0]?.pageX ?? 0;
+      if (x > 20 && x < window.innerWidth - 20) return;
       const target = e.target as HTMLElement;
       if (target.closest(".favorites-panel") || target.closest(".stop-panel")) return;
-      if (touchStartX < 24 && e.touches[0].clientX - touchStartX > 0) {
-        e.preventDefault();
-      }
+      e.preventDefault();
     }
-    document.addEventListener("touchstart", handleTouchStart, { passive: true });
-    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    if (root) {
+      (root as HTMLElement).addEventListener("touchstart", handleTouchStart, { passive: false });
+    }
 
     return () => {
-      window.removeEventListener("popstate", handlePopState);
-      document.removeEventListener("touchstart", handleTouchStart);
-      document.removeEventListener("touchmove", handleTouchMove);
+      document.body.classList.remove("no-swipe-back");
+      if (root) {
+        (root as HTMLElement).removeEventListener("touchstart", handleTouchStart);
+      }
     };
   }, [view]);
 
@@ -152,6 +160,7 @@ export default function Home() {
   function handleAuth(_token: string, user: string) {
     setUsername(user);
     setSessionExpiredMessage("");
+    window.history.replaceState(null, "", window.location.href);
     setView("map");
   }
 
@@ -219,14 +228,13 @@ export default function Home() {
         isFavourite={selectedStop ? favouriteStopCodes.has(selectedStop.stop_code) : false}
         onFavouriteAdd={addFavouriteStop}
         onFavouriteRemove={removeFavouriteStop}
-        onDismissedChange={setPanelDismissed}
-        onExpandedChange={setPanelExpanded}
+        userLocation={userLocation}
       />
       <MapView
         favouriteStopCodes={favouriteStopCodes}
-        favouriteStopCodesKey={favouriteStopCodesKey}
         selectedStop={selectedStop}
         onSelectStop={handleSelectStop}
+        onLocationChange={handleLocationChange}
         theme={theme}
       />
     </div>
