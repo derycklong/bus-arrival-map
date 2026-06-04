@@ -101,6 +101,7 @@ export default function FavoritesPanel({
 }: FavoritesPanelProps) {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [confirmUnfav, setConfirmUnfav] = useState(false);
+  const [confirmBusFav, setConfirmBusFav] = useState<{ busNo: string; action: "add" | "remove" } | null>(null);
   const [refreshingFavs, setRefreshingFavs] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -547,7 +548,14 @@ export default function FavoritesPanel({
   function toggleBusFav(busNo: string) {
     if (!selectedStop) return;
     const isFav = favBuses.has(busNo);
-    if (isFav) {
+    setConfirmBusFav({ busNo, action: isFav ? "remove" : "add" });
+  }
+
+  function handleConfirmBusFav() {
+    if (!confirmBusFav || !selectedStop) return;
+    const { busNo, action } = confirmBusFav;
+    setConfirmBusFav(null);
+    if (action === "remove") {
       setFavBuses((prev) => { const next = new Set(prev); next.delete(busNo); return next; });
       updateListFavForStop(selectedStop.stop_code, (s) => s.delete(busNo));
       removeFavouriteBus(selectedStop.stop_code, busNo).catch(() => {
@@ -1077,6 +1085,29 @@ export default function FavoritesPanel({
             <div className="modal-actions">
               <button onClick={() => setConfirmUnfav(false)} className="modal-cancel">Cancel</button>
               <button onClick={handleConfirmRemoveFav} className="modal-confirm">Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bus fav/unfav confirmation */}
+      {confirmBusFav && (
+        <div
+          className="fixed inset-0 z-[2000] flex items-center justify-center bg-[rgba(10,10,30,0.85)]"
+          onClick={() => setConfirmBusFav(null)}
+        >
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h2>{confirmBusFav.action === "add" ? "Add to Favorites?" : "Remove from Favorites?"}</h2>
+            <p>
+              {confirmBusFav.action === "add"
+                ? `Add bus ${confirmBusFav.busNo} at ${selectedStop?.name ?? "this stop"} to your favorites?`
+                : `Remove bus ${confirmBusFav.busNo} at ${selectedStop?.name ?? "this stop"} from your favorites?`}
+            </p>
+            <div className="modal-actions">
+              <button onClick={() => setConfirmBusFav(null)} className="modal-cancel">Cancel</button>
+              <button onClick={handleConfirmBusFav} className="modal-confirm">
+                {confirmBusFav.action === "add" ? "Add" : "Remove"}
+              </button>
             </div>
           </div>
         </div>
