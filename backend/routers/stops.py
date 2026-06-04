@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api", tags=["stops"])
 # In-memory cache for arrivals (per-stop)
 _arrivals_cache: dict[str, dict] = {}
 _cache_lock = threading.Lock()
-CACHE_TTL = 10  # seconds
+CACHE_TTL = 7  # seconds — shorter than the 10 s frontend polling to ensure freshness
 CACHE_MAX_ENTRIES = 2000
 
 # Crude per-process rate limiter for upstream LTA calls to avoid burning quota

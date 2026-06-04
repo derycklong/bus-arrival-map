@@ -1,8 +1,8 @@
-const CACHE = "bus-map-v3";
+const CACHE = "bus-map-v4";
 
 const PRECACHE_URLS = ["/", "/manifest.json"];
 
-const NAVIAGTION_CACHE = "bus-map-nav-v3";
+const NAVIAGTION_CACHE = "bus-map-nav-v4";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

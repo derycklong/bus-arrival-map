@@ -26,10 +26,40 @@ function normalizeError(err: unknown): string {
   return msg;
 }
 
+function BusIcon({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 6v6" />
+      <path d="M15 6v6" />
+      <path d="M2 12h19.6" />
+      <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v5h3" />
+      <circle cx="7" cy="18" r="2" />
+      <path d="M9 18h5" />
+      <circle cx="16" cy="18" r="2" />
+    </svg>
+  );
+}
+
+function EyeIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ) : (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" y1="2" x2="22" y2="22" />
+    </svg>
+  );
+}
+
 export default function AuthForm({ onAuth, sessionExpiredMessage }: AuthFormProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
   const [error, setError] = useState(sessionExpiredMessage || "");
@@ -88,206 +118,187 @@ export default function AuthForm({ onAuth, sessionExpiredMessage }: AuthFormProp
   }
 
   const isLoading = submitState === "loading";
-  const title = mode === "login" ? "Welcome back" : "Create your account";
-  const subtitle = mode === "login"
-    ? "Log in to see your saved stops."
-    : "Save your favorite stops across devices.";
 
   return (
-    <div className="auth-screen fixed inset-0 z-50 overflow-y-auto" style={{ background: "var(--color-bg)" }}>
-      <div className="auth-screen-inner flex items-center justify-center px-4 py-6">
+    <div className="auth-screen">
+      <div className="auth-bg" aria-hidden="true">
+        <div className="auth-bg-blob auth-bg-blob-a" />
+        <div className="auth-bg-blob auth-bg-blob-b" />
+        <div className="auth-bg-blob auth-bg-blob-c" />
+      </div>
+      <div className="auth-screen-inner">
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="w-full max-w-[380px] rounded-2xl p-8 text-center fade-in"
-          style={{
-            background: "var(--color-surface)",
-            backdropFilter: "blur(24px)",
-            WebkitBackdropFilter: "blur(24px)",
-            border: "1px solid var(--color-glass-border)",
-            boxShadow: "0 8px 32px var(--color-glass-shadow)",
-          }}
+          className="auth-card"
+          aria-label={mode === "login" ? "Login" : "Register"}
         >
-          {/* App branding */}
-          <div className="mb-6">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[var(--color-accent)] mb-3">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="4" y="3" width="16" height="16" rx="3"/>
-                <rect x="6" y="5" width="12" height="6" rx="1"/>
-                <circle cx="8" cy="16" r="1.5"/>
-                <circle cx="16" cy="16" r="1.5"/>
-                <line x1="8" y1="19" x2="8" y2="21"/>
-                <line x1="16" y1="19" x2="16" y2="21"/>
-              </svg>
+          <div className="auth-brand">
+            <div className="auth-brand-icon">
+              <BusIcon />
             </div>
-            <h1 className="text-xl font-bold" style={{ color: "var(--color-text)" }}>Bus Arrival Map</h1>
-            <p className="text-xs mt-1 font-semibold tracking-wider uppercase" style={{ color: "var(--color-text-muted)" }}>
-              derycklong
+            <div className="auth-brand-text">
+              <span className="auth-brand-kicker">derycklong</span>
+              <span className="auth-brand-title">Bus Arrival Map</span>
+            </div>
+          </div>
+
+          <div className="auth-header">
+            <h1 className="auth-title">
+              {mode === "login" ? "Welcome back" : "Create your account"}
+            </h1>
+            <p className="auth-subtitle">
+              {mode === "login"
+                ? "Log in to see your saved stops."
+                : "Save your favorite stops across devices."}
             </p>
           </div>
 
-          {/* Title */}
-          <p className="text-base font-semibold mb-1" style={{ color: "var(--color-text)" }}>{title}</p>
-          <p className="text-sm mb-6" style={{ color: "var(--color-text-secondary)" }}>{subtitle}</p>
-
-          {/* Tabs */}
-          <div
-            className="flex mb-5 rounded-xl overflow-hidden p-1"
-            style={{ background: "var(--color-surface-hover)" }}
-          >
+          <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
             <button
               type="button"
-              aria-pressed={mode === "login"}
+              role="tab"
+              aria-selected={mode === "login"}
               disabled={isLoading}
-              className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg transition-all duration-200"
-              style={{
-                background: mode === "login" ? "var(--color-accent)" : "transparent",
-                color: mode === "login" ? "#ffffff" : "var(--color-text-secondary)",
-              }}
               onClick={() => switchMode("login")}
+              className={"auth-tab" + (mode === "login" ? " is-active" : "")}
             >
               Login
             </button>
             <button
               type="button"
-              aria-pressed={mode === "register"}
+              role="tab"
+              aria-selected={mode === "register"}
               disabled={isLoading}
-              className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg transition-all duration-200"
-              style={{
-                background: mode === "register" ? "var(--color-accent)" : "transparent",
-                color: mode === "register" ? "#ffffff" : "var(--color-text-secondary)",
-              }}
               onClick={() => switchMode("register")}
+              className={"auth-tab" + (mode === "register" ? " is-active" : "")}
             >
               Register
             </button>
+            <span
+              className="auth-tab-indicator"
+              aria-hidden="true"
+              style={{ transform: mode === "login" ? "translateX(0%)" : "translateX(100%)" }}
+            />
           </div>
 
-          {/* Inputs */}
-          <div className="space-y-3">
-            <input
-              className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
-              style={{
-                background: "var(--color-surface-hover)",
-                border: "1px solid var(--color-border-strong)",
-                color: "var(--color-text)",
-              }}
-              placeholder="Username"
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={isLoading}
-              onFocus={(e) => (e.target.style.borderColor = "var(--color-accent)")}
-              onBlur={(e) => (e.target.style.borderColor = "var(--color-border-strong)")}
-            />
-            <input
-              className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
-              style={{
-                background: "var(--color-surface-hover)",
-                border: "1px solid var(--color-border-strong)",
-                color: "var(--color-text)",
-              }}
-              type="password"
-              placeholder="Password"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isLoading}
-              onFocus={(e) => (e.target.style.borderColor = "var(--color-accent)")}
-              onBlur={(e) => (e.target.style.borderColor = "var(--color-border-strong)")}
-            />
+          <div className="auth-fields">
+            <div className="auth-field">
+              <label htmlFor="auth-username" className="auth-label">Username</label>
+              <input
+                id="auth-username"
+                className="auth-input"
+                placeholder="Enter your username"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="auth-field">
+              <label htmlFor="auth-password" className="auth-label">Password</label>
+              <div className="auth-input-wrap">
+                <input
+                  id="auth-password"
+                  className="auth-input auth-input-with-action"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  className="auth-input-action"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
+            </div>
 
             {mode === "register" && (
-              <div className="space-y-3 slide-up">
-                <input
-                  className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
-                  style={{
-                    background: "var(--color-surface-hover)",
-                    border: "1px solid var(--color-border-strong)",
-                    color: "var(--color-text)",
-                  }}
-                  type="email"
-                  placeholder="Email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
-                  onFocus={(e) => (e.target.style.borderColor = "var(--color-accent)")}
-                  onBlur={(e) => (e.target.style.borderColor = "var(--color-border-strong)")}
-                />
-                <input
-                  className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all duration-200"
-                  style={{
-                    background: "var(--color-surface-hover)",
-                    border: "1px solid var(--color-border-strong)",
-                    color: "var(--color-text)",
-                  }}
-                  type="tel"
-                  placeholder="Mobile number (e.g. 91234567)"
-                  autoComplete="tel"
-                  maxLength={8}
-                  value={mobileNumber}
-                  onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ""))}
-                  disabled={isLoading}
-                  onFocus={(e) => (e.target.style.borderColor = "var(--color-accent)")}
-                  onBlur={(e) => (e.target.style.borderColor = "var(--color-border-strong)")}
-                />
-              </div>
+              <>
+                <div className="auth-field auth-field-anim">
+                  <label htmlFor="auth-email" className="auth-label">Email</label>
+                  <input
+                    id="auth-email"
+                    className="auth-input"
+                    type="email"
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="auth-field auth-field-anim">
+                  <label htmlFor="auth-mobile" className="auth-label">Mobile number</label>
+                  <input
+                    id="auth-mobile"
+                    className="auth-input"
+                    type="tel"
+                    placeholder="91234567"
+                    autoComplete="tel"
+                    maxLength={8}
+                    value={mobileNumber}
+                    onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ""))}
+                    disabled={isLoading}
+                  />
+                </div>
+              </>
             )}
           </div>
 
-          {/* Error */}
           {error && (
             <p
               ref={statusRef}
               tabIndex={-1}
               aria-live="assertive"
-              className="text-sm mt-4 py-3 px-4 rounded-xl outline-none fade-in"
-              style={{
-                background: "var(--color-danger-bg)",
-                border: "1px solid var(--color-danger)",
-                color: "var(--color-text)",
-              }}
+              className="auth-error"
+              role="alert"
             >
-              {error}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span>{error}</span>
             </p>
           )}
 
-          {/* Loading */}
-          {isLoading && (
-            <p
-              aria-live="polite"
-              className="text-sm mt-4 py-3 px-4 rounded-xl fade-in flex items-center justify-center gap-2"
-              style={{
-                background: "rgba(37, 99, 235, 0.1)",
-                border: "1px solid rgba(37, 99, 235, 0.3)",
-                color: "var(--color-text)",
-              }}
-            >
-              <span className="spinner-modern inline-block" />
-              Connecting securely...
-            </p>
-          )}
-
-          {/* Submit */}
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full mt-5 py-3 rounded-xl font-semibold text-sm cursor-pointer transition-all duration-200"
-            style={{
-              background: "var(--color-accent)",
-              opacity: isLoading ? 0.5 : 1,
-              color: "#ffffff",
-            }}
+            className="auth-submit"
           >
-            {isLoading
-              ? "Please wait..."
-              : mode === "login"
-              ? "Login"
-              : "Register"}
+            {isLoading ? (
+              <>
+                <span className="auth-spinner" aria-hidden="true" />
+                <span>Please wait…</span>
+              </>
+            ) : (
+              <span>{mode === "login" ? "Login" : "Create account"}</span>
+            )}
           </button>
+
+          <p className="auth-footer">
+            {mode === "login" ? "New here? " : "Already have an account? "}
+            <button
+              type="button"
+              className="auth-link"
+              onClick={() => switchMode(mode === "login" ? "register" : "login")}
+              disabled={isLoading}
+            >
+              {mode === "login" ? "Create an account" : "Log in"}
+            </button>
+          </p>
         </form>
       </div>
     </div>

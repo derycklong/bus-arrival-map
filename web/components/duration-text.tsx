@@ -27,14 +27,19 @@ export default function DurationText({ ms, time }: DurationTextProps) {
 
   useEffect(() => {
     if (!time) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset countdown when time is cleared
       setLiveMs(null);
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       return;
     }
-    const tick = () => setLiveMs(msFromTime(time));
-    tick();
     const cur = msFromTime(time);
     if (cur < 60000 && cur >= 0) {
+      const tick = () => setLiveMs(msFromTime(time));
+      tick();
       intervalRef.current = setInterval(tick, 1000);
+    } else {
+      setLiveMs(null);
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     }
     return () => {
       if (intervalRef.current) {
@@ -42,9 +47,9 @@ export default function DurationText({ ms, time }: DurationTextProps) {
         intervalRef.current = null;
       }
     };
-  }, [time]);
+  }, [time, ms]);
 
-  const effectiveMs = time ? liveMs : ms;
+  const effectiveMs = time && liveMs !== null ? liveMs : ms;
 
   if (effectiveMs === null || effectiveMs === undefined) {
     return <span style={{ color: NEUTRAL, fontSize: "11px", fontWeight: 600 }}>---</span>;

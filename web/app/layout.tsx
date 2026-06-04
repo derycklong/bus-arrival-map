@@ -35,7 +35,7 @@ const noFlashScript = `
     var def = ${JSON.stringify(PRECOMPUTED_DEFAULT_THEME)};
     var t = localStorage.getItem('themeId');
     var m = localStorage.getItem('mode');
-    if (m !== 'light' && m !== 'dark') m = 'dark';
+    if (m !== 'light' && m !== 'dark') m = 'light';
     if (!t || !db[t]) t = def;
     var vars = db[t] && db[t][m] ? db[t][m] : db[def][m === 'light' ? 'light' : 'dark'];
     var root = document.documentElement;

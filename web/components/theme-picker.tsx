@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { THEMES } from "@/lib/themes";
 import { resolveTheme } from "@/lib/theme-resolver";
 import { THEME_MAP } from "@/lib/themes";
@@ -59,18 +59,6 @@ export default function ThemePicker({
   onSelect,
   onModeChange,
 }: ThemePickerProps) {
-  const [query, setQuery] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-  const wasOpen = useRef(false);
-
-  useEffect(() => {
-    if (open && !wasOpen.current) {
-      setQuery("");
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-    wasOpen.current = open;
-  }, [open]);
-
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -92,20 +80,9 @@ export default function ThemePicker({
   // currently-selected mode. A dark-only theme (e.g. Aura, Ayu) is hidden
   // when browsing in day mode so the user never sees something that would
   // silently fall back to dark.
-  const availableInMode = useMemo(() => {
+  const filtered = useMemo(() => {
     return THEMES.filter((t) => (mode === "dark" ? t.hasDark : t.hasLight));
   }, [mode]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return availableInMode;
-    return availableInMode.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.id.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q)
-    );
-  }, [query, availableInMode]);
 
   if (!open) return null;
 
@@ -113,9 +90,6 @@ export default function ThemePicker({
     onSelect(themeId);
     onClose();
   }
-
-  const otherMode: Mode = mode === "dark" ? "light" : "dark";
-  const otherModeCount = THEMES.filter((t) => (otherMode === "dark" ? t.hasDark : t.hasLight)).length;
 
   return (
     <div
@@ -132,8 +106,7 @@ export default function ThemePicker({
           <div>
             <h2>Theme</h2>
             <p className="theme-picker-sub">
-              {availableInMode.length} {mode === "dark" ? "night" : "day"} themes
-              {otherModeCount > 0 && ` · ${otherModeCount} ${otherMode === "dark" ? "night" : "day"} hidden`}
+              {filtered.length} {mode === "dark" ? "night" : "day"} themes
             </p>
           </div>
           <button
@@ -172,20 +145,7 @@ export default function ThemePicker({
           </button>
         </div>
 
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search themes…"
-          className="theme-picker-search"
-          autoComplete="off"
-          spellCheck={false}
-        />
         <div className="theme-picker-grid" role="listbox" aria-label="Themes">
-          {filtered.length === 0 && (
-            <p className="theme-picker-empty">No {mode === "dark" ? "night" : "day"} themes match “{query}”.</p>
-          )}
           {filtered.map((theme) => {
             const preview = previews[theme.id] ?? previewColorsFor(theme.id, mode);
             const isActive = theme.id === selected;

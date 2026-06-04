@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   getArrivals,
   getFavouriteBuses,
+  getStops,
   addFavouriteBus,
   removeFavouriteBus,
   StopBase,
@@ -265,15 +266,104 @@ export default function FavoritesPanel({
   const [listFavBuses, setListFavBuses] = useState<Map<string, Set<string>>>(new Map());
   const stopCodesKey = stops.map((s) => s.stop.stop_code).join(",");
 
-  // Panel tab — "upcoming" (left, default) shows the next 5 arriving buses
-  // across all saved stops; "stops" is the original per-stop list.
-  const [activeTab, setActiveTab] = useState<"upcoming" | "stops">("upcoming");
+  const [activeTab, setActiveTab] = useState<"nearby" | "stops">("nearby");
 
-  const upcomingBuses = useMemo(() => {
-    type NearbyBus = { service: Service; durationMs: number; isFav: true };
-    type NearbyGroup = { stop: FavouriteStop; distanceM: number; buses: NearbyBus[] };
+  // All-stops fallback: populated by getStops + per-stop getArrivals when
+  // the user is on the Nearby tab with location. Always fetched (regardless
+  // of whether the user has favourited stops) so the data is ready if the
+  // fav-path returns nothing.  No cleanup-based cancellation — the fetchId
+  // counter discards stale responses without killing in-flight requests
+  // (GPS noise was tearing them down).
+  interface NearbyAllGroup {
+    stop: StopBase;
+    distanceM: number;
+    services: Service[];
+    loading: boolean;
+    error: boolean;
+  }
+  const [nearbyAllGroups, setNearbyAllGroups] = useState<NearbyAllGroup[]>([]);
+  const [nearbyAllLoading, setNearbyAllLoading] = useState(false);
+  const [nearbyAllError, setNearbyAllError] = useState(false);
+  const nearbyAllFetchId = useRef(0);
+  const nearbyAllTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nearbyAllPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const userLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  useEffect(() => { userLocationRef.current = userLocation ?? null; });
+
+  const favStopCodesRef = useRef<Set<string>>(new Set());
+  useEffect(() => { favStopCodesRef.current = new Set(stops.map((s) => s.stop.stop_code)); });
+
+  const doNearbyFetch = useCallback((lat: number, lng: number) => {
+    const myFetchId = ++nearbyAllFetchId.current;
+    setNearbyAllLoading(true);
+    setNearbyAllError(false);
+    getStops(lat, lng, NEARBY_RADIUS_M)
+      .then(async (data) => {
+        if (myFetchId !== nearbyAllFetchId.current) return;
+        const nearby = data.stops;
+        if (nearby.length === 0) {
+          setNearbyAllGroups([]);
+          setNearbyAllLoading(false);
+          return;
+        }
+        const favCodes = favStopCodesRef.current;
+        const arrivals = await Promise.allSettled(
+          nearby.map((s) => favCodes.has(s.stop_code)
+            ? Promise.resolve({ services: [] as Service[] })
+            : getArrivals(s.stop_code))
+        );
+        if (myFetchId !== nearbyAllFetchId.current) return;
+        const groups: NearbyAllGroup[] = nearby.map((s, i) => {
+          const r = arrivals[i];
+          return {
+            stop: s,
+            distanceM: s.distance_m,
+            services: r.status === "fulfilled" ? r.value.services : [],
+            loading: false,
+            error: r.status === "rejected",
+          };
+        });
+        setNearbyAllGroups(groups);
+        setNearbyAllLoading(false);
+      })
+      .catch(() => {
+        if (myFetchId !== nearbyAllFetchId.current) return;
+        setNearbyAllError(true);
+        setNearbyAllLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!userLocation || isDetailView || activeTab !== "nearby") return;
+    if (nearbyAllTimer.current) clearTimeout(nearbyAllTimer.current);
+    nearbyAllTimer.current = setTimeout(() => {
+      doNearbyFetch(userLocation.lat, userLocation.lng);
+    }, 300);
+    return () => { if (nearbyAllTimer.current) clearTimeout(nearbyAllTimer.current); };
+  }, [userLocation, isDetailView, activeTab, doNearbyFetch]);
+
+  useEffect(() => {
+    if (isDetailView || activeTab !== "nearby") {
+      if (nearbyAllPollTimer.current) { clearInterval(nearbyAllPollTimer.current); nearbyAllPollTimer.current = null; }
+      return;
+    }
+    nearbyAllPollTimer.current = setInterval(() => {
+      const loc = userLocationRef.current;
+      if (!loc) return;
+      doNearbyFetch(loc.lat, loc.lng);
+    }, 10000);
+    return () => {
+      if (nearbyAllPollTimer.current) { clearInterval(nearbyAllPollTimer.current); nearbyAllPollTimer.current = null; }
+    };
+  }, [isDetailView, activeTab, doNearbyFetch]);
+
+  const nearbyBuses = useMemo(() => {
+    type NearbyBus = { service: Service; durationMs: number; isFav: boolean };
+    type NearbyGroup = { stop: StopBase; distanceM: number; buses: NearbyBus[] };
     if (!userLocation) return [] as NearbyGroup[];
-    const groups: NearbyGroup[] = [];
+
+    // Path 1: favourite stops with at least one starred bus.
+    const favGroups: NearbyGroup[] = [];
     for (const item of stops) {
       if (item.loading || item.error) continue;
       const stopFavs = listFavBuses.get(item.stop.stop_code);
@@ -287,16 +377,29 @@ export default function FavoritesPanel({
         buses.push({ service: svc, durationMs: svc.next.duration_ms, isFav: true });
       }
       buses.sort((a, b) => a.durationMs - b.durationMs);
-      groups.push({ stop: item.stop, distanceM: d, buses });
+      favGroups.push({ stop: item.stop, distanceM: d, buses });
+    }
+    favGroups.sort((a, b) => a.distanceM - b.distanceM);
+    if (favGroups.length > 0) return favGroups;
+
+    // Path 2: fall back to every nearby stop + bus (fav or not).
+    const groups: NearbyGroup[] = [];
+    for (const g of nearbyAllGroups) {
+      if (g.loading || g.error) continue;
+      const buses: NearbyBus[] = [];
+      for (const svc of g.services) {
+        if (svc.next?.duration_ms == null) continue;
+        buses.push({ service: svc, durationMs: svc.next.duration_ms, isFav: false });
+      }
+      buses.sort((a, b) => a.durationMs - b.durationMs);
+      groups.push({ stop: g.stop, distanceM: g.distanceM, buses });
     }
     groups.sort((a, b) => a.distanceM - b.distanceM);
     return groups;
-  }, [userLocation, stops, listFavBuses]);
-  const nearbyGroups = upcomingBuses;
-  const upcomingFavCount = nearbyGroups.reduce((n, g) => n + g.buses.length, 0);
+  }, [nearbyAllGroups, userLocation, stops, listFavBuses]);
+  const nearbyGroups = nearbyBuses;
+  const nearbyCount = nearbyGroups.reduce((n, g) => n + g.buses.length, 0);
 
-  // Soonest favourite bus across all nearby groups — shown on the reopen pill
-  // as a glanceable live preview so the pill is useful even before opening.
   const soonestFavBus = useMemo(() => {
     let best: { service: Service; durationMs: number } | null = null;
     for (const g of nearbyGroups) {
@@ -309,8 +412,6 @@ export default function FavoritesPanel({
     return best;
   }, [nearbyGroups]);
 
-  // Saved stops annotated with distance (for the Stops tab distance pill),
-  // sorted nearest-first when the user's location is available.
   const stopsWithDistance = useMemo(() => {
     const annotated = stops.map((item) => ({
       item,
@@ -358,6 +459,31 @@ export default function FavoritesPanel({
       .catch(() => {});
     return () => { cancelled = true; };
   }, [selectedStop]);
+
+  const detailStopCode = selectedStop?.stop_code ?? null;
+  const detailFetchId = useRef(0);
+  const detailPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!detailStopCode) return;
+    detailFetchId.current++;
+    const myFetchId = detailFetchId.current;
+    const refresh = () => {
+      getArrivals(detailStopCode)
+        .then((data) => {
+          if (myFetchId !== detailFetchId.current) return;
+          setDetailServices(data.services || []);
+        })
+        .catch(() => {});
+    };
+    detailPollTimer.current = setInterval(refresh, 10000);
+    return () => {
+      if (detailPollTimer.current) {
+        clearInterval(detailPollTimer.current);
+        detailPollTimer.current = null;
+      }
+    };
+  }, [detailStopCode]);
 
   useEffect(() => {
     if (isDetailView) return;
@@ -440,8 +566,8 @@ export default function FavoritesPanel({
             <h2>
               {isDetailView
                 ? (selectedStop?.name || "Stop Detail")
-                : activeTab === "upcoming"
-                  ? "Upcoming"
+                : activeTab === "nearby"
+                  ? "Nearby"
                   : "Saved Stops"}
             </h2>
             {isDetailView && (
@@ -522,17 +648,17 @@ export default function FavoritesPanel({
           <div className="panel-tabs" role="tablist" aria-label="Panel views">
             <button
               role="tab"
-              aria-selected={activeTab === "upcoming"}
-              aria-controls="panel-upcoming"
-              onClick={() => setActiveTab("upcoming")}
-              className={"panel-tab" + (activeTab === "upcoming" ? " is-active" : "")}
+              aria-selected={activeTab === "nearby"}
+              aria-controls="panel-nearby"
+              onClick={() => setActiveTab("nearby")}
+              className={"panel-tab" + (activeTab === "nearby" ? " is-active" : "")}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="9"/>
                 <polyline points="12 7 12 12 15 14"/>
               </svg>
-              <span>Upcoming</span>
-              <span className="panel-tab-count">{upcomingFavCount}</span>
+              <span>Nearby</span>
+              <span className="panel-tab-count">{nearbyCount}</span>
             </button>
             <button
               role="tab"
@@ -652,8 +778,8 @@ export default function FavoritesPanel({
               </div>
             )}
 
-            {activeTab === "upcoming" && stops.length > 0 && !userLocation && (
-              <div className="empty-state flex-1" id="panel-upcoming" role="tabpanel">
+            {activeTab === "nearby" && !userLocation && (
+              <div className="empty-state flex-1" id="panel-nearby" role="tabpanel">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-2" style={{ background: "var(--color-accent)", color: "white" }}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="3" fill="currentColor"/>
@@ -665,37 +791,101 @@ export default function FavoritesPanel({
                   </svg>
                 </div>
                 <p className="empty-title">Share your location</p>
-                <p>Allow location access to see saved stops within {NEARBY_RADIUS_M}&nbsp;m and their favourite buses.</p>
+                <p>Allow location access to see buses at stops within {NEARBY_RADIUS_M}&nbsp;m.</p>
               </div>
             )}
 
-            {activeTab === "upcoming" && stops.length > 0 && userLocation && nearbyGroups.length === 0 && (
-              <div className="empty-state flex-1" id="panel-upcoming" role="tabpanel">
-                <p className="empty-title">Nothing nearby</p>
-                <p>No saved stops with favourite buses within {NEARBY_RADIUS_M}&nbsp;m. Star a bus at a closer stop, or save a stop near you.</p>
+            {activeTab === "nearby" && userLocation && nearbyAllLoading && nearbyAllGroups.length === 0 && nearbyGroups.length === 0 && (
+              <div className="flex-1 flex flex-col gap-3 p-4" id="panel-nearby" role="tabpanel">
+                {[1,2,3,4,5].map((i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "var(--color-surface-hover)" }}>
+                    <div className="flex-1 space-y-2">
+                      <div className="skeleton w-32 h-4" />
+                      <div className="skeleton w-24 h-3" />
+                      <div className="skeleton w-16 h-3" />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {activeTab === "upcoming" && stops.length > 0 && userLocation && nearbyGroups.length > 0 && (
-              <div className="upcoming-list" id="panel-upcoming" role="tabpanel">
+            {activeTab === "nearby" && userLocation && nearbyAllError && nearbyAllGroups.length === 0 && nearbyGroups.length === 0 && (
+              <div className="empty-state flex-1" id="panel-nearby" role="tabpanel">
+                <p className="empty-title" style={{ color: "var(--color-danger)" }}>Failed to load nearby stops</p>
+                <button
+                  onClick={() => {
+                    const lat = userLocation?.lat;
+                    const lng = userLocation?.lng;
+                    if (lat == null || lng == null) return;
+                    const myFetchId = ++nearbyAllFetchId.current;
+                    setNearbyAllLoading(true);
+                    setNearbyAllError(false);
+                    getStops(lat, lng, NEARBY_RADIUS_M)
+                      .then(async (data) => {
+                        if (myFetchId !== nearbyAllFetchId.current) return;
+                        const nearby = data.stops;
+                        if (nearby.length === 0) {
+                          setNearbyAllGroups([]);
+                          setNearbyAllLoading(false);
+                          return;
+                        }
+                        const arrivals = await Promise.allSettled(
+                          nearby.map((s) => getArrivals(s.stop_code))
+                        );
+                        if (myFetchId !== nearbyAllFetchId.current) return;
+                        const groups: NearbyAllGroup[] = nearby.map((s, i) => {
+                          const r = arrivals[i];
+                          return {
+                            stop: s,
+                            distanceM: s.distance_m,
+                            services: r.status === "fulfilled" ? r.value.services : [],
+                            loading: false,
+                            error: r.status === "rejected",
+                          };
+                        });
+                        setNearbyAllGroups(groups);
+                        setNearbyAllLoading(false);
+                      })
+                      .catch(() => {
+                        if (myFetchId !== nearbyAllFetchId.current) return;
+                        setNearbyAllError(true);
+                        setNearbyAllLoading(false);
+                      });
+                  }}
+                  className="primary-button"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {activeTab === "nearby" && userLocation && !nearbyAllLoading && !nearbyAllError && nearbyGroups.length === 0 && (
+              <div className="empty-state flex-1" id="panel-nearby" role="tabpanel">
+                <p className="empty-title">No bus stops nearby</p>
+                <p>No stops with nearby buses within {NEARBY_RADIUS_M}&nbsp;m. Try moving to a different location, or save a stop on the map to track it here.</p>
+              </div>
+            )}
+
+            {activeTab === "nearby" && userLocation && nearbyGroups.length > 0 && (
+              <div className="nearby-list" id="panel-nearby" role="tabpanel">
                 {nearbyGroups.map((g) => (
                   <div key={g.stop.stop_code}>
                     <div
-                      className="upcoming-stop-header"
+                      className="nearby-stop-header"
                       role="button"
                       tabIndex={0}
                       onClick={() => onSelectStop(g.stop)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectStop(g.stop); } }}
                     >
-                      <div className="upcoming-stop-header-main">
-                        <svg className="upcoming-pin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <div className="nearby-stop-header-main">
+                        <svg className="nearby-pin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                           <circle cx="12" cy="10" r="3"/>
                         </svg>
-                        <span className="upcoming-stop-header-name">{g.stop.name}</span>
-                        <span className="upcoming-stop-header-code">· {g.stop.stop_code}</span>
+                        <span className="nearby-stop-header-name">{g.stop.name}</span>
+                        <span className="nearby-stop-header-code">· {g.stop.stop_code}</span>
                       </div>
-                      <span className="upcoming-stop-distance">{formatDistance(g.distanceM)}</span>
+                      <span className="nearby-stop-distance">{formatDistance(g.distanceM)}</span>
                     </div>
                     {g.buses.length > 0 ? (
                       g.buses.map((u, i) => (
@@ -705,35 +895,28 @@ export default function FavoritesPanel({
                           tabIndex={0}
                           onClick={() => onSelectStop(g.stop)}
                           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectStop(g.stop); } }}
-                          className="upcoming-row is-bus-fav"
+                          className={"nearby-row" + (u.isFav ? " is-bus-fav" : "")}
                         >
-                          <div className="upcoming-row-top">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--color-fav)" stroke="var(--color-fav)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-label="Favorite bus" style={{ flexShrink: 0 }}>
+                          <div className="nearby-row-top">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill={u.isFav ? "var(--color-fav)" : "none"} stroke={u.isFav ? "var(--color-fav)" : "var(--color-text-muted)"} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-label={u.isFav ? "Favorite bus" : "Bus"} style={{ flexShrink: 0 }}>
                               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                             </svg>
                             <span className="bus-badge" data-op={u.service.operator}>{u.service.no}</span>
                             <DurationText ms={u.durationMs} time={u.service.next?.time} />
-                            <span className="upcoming-dest">
+                            <span className="nearby-dest">
                               {u.service.next?.destination_name || u.service.next?.destination_code || "—"}
                             </span>
-                            <svg className="upcoming-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <svg className="nearby-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                               <polyline points="9 18 15 12 9 6"/>
                             </svg>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div className="upcoming-group-empty">No upcoming arrivals for your favourite buses.</div>
+                      <div className="nearby-group-empty">No nearby arrivals at this stop.</div>
                     )}
                   </div>
                 ))}
-              </div>
-            )}
-
-            {activeTab === "upcoming" && stops.length === 0 && !loading && !error && (
-              <div className="empty-state flex-1" id="panel-upcoming" role="tabpanel">
-                <p className="empty-title">No upcoming buses</p>
-                <p>Save a bus stop to see arrivals here.</p>
               </div>
             )}
 
@@ -809,7 +992,6 @@ export default function FavoritesPanel({
                             }
                             const sorted = [...pool].sort((a, b) => (a.next?.duration_ms ?? 999999) - (b.next?.duration_ms ?? 999999));
                             const top = sorted.slice(0, 2);
-                            const more = sorted.length - top.length;
                             return (
                               <>
                                 {top.map((svc, i) => {
@@ -829,7 +1011,6 @@ export default function FavoritesPanel({
                                     </div>
                                   );
                                 })}
-                                {more > 0 && <span className="favorite-bus-more">+{more}</span>}
                               </>
                             );
                           })()

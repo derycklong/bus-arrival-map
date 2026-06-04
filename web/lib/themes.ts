@@ -96,7 +96,7 @@ export const THEME_MAP: Record<string, ThemeJson> = Object.fromEntries(
   REGISTRY.map((r) => [r.meta.id, r.data])
 );
 
-export const DEFAULT_THEME_ID = "opencode";
+export const DEFAULT_THEME_ID = "material";
 
 export function getTheme(id: string): ThemeJson | undefined {
   return THEME_MAP[id];
