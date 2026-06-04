@@ -113,6 +113,8 @@ export default function FavoritesPanel({
   const swipingHorizontal = useRef(false);
   const startedInScrollable = useRef(false);
 
+  const [activeTab, setActiveTab] = useState<"nearby" | "stops">("nearby");
+
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
     const scrollable = target.closest(".arrivals-table-wrap, .favorites-list");
@@ -134,7 +136,11 @@ export default function FavoritesPanel({
     const dx = swipeCurrentX.current - swipeStartX.current;
     const dy = touchCurrentY.current - touchStartY.current;
     if (isDetailView && Math.abs(dx) > 15 && (touchStartY.current === -999 || Math.abs(dx) > Math.abs(dy))) {
-      e.preventDefault();
+      swipingHorizontal.current = true;
+      return;
+    }
+    // List view: detect horizontal swipe for tab switching
+    if (!isDetailView && Math.abs(dx) > 15 && Math.abs(dx) > Math.abs(dy) * 1.5) {
       swipingHorizontal.current = true;
       return;
     }
@@ -156,9 +162,24 @@ export default function FavoritesPanel({
 
   const handleTouchEnd = useCallback(() => {
     const hDx = swipeCurrentX.current - swipeStartX.current;
+    // Detail view: swipe right to close
     if (swipingHorizontal.current && isDetailView) {
       if (hDx > 40) {
         onCloseStop();
+      }
+      swipingHorizontal.current = false;
+      swipeStartX.current = 0;
+      swipeCurrentX.current = 0;
+      touchStartY.current = 0;
+      touchCurrentY.current = 0;
+      return;
+    }
+    // List view: swipe left/right to switch tabs
+    if (swipingHorizontal.current && !isDetailView) {
+      if (hDx < -60) {
+        setActiveTab("stops");
+      } else if (hDx > 60) {
+        setActiveTab("nearby");
       }
       swipingHorizontal.current = false;
       swipeStartX.current = 0;
@@ -207,15 +228,15 @@ export default function FavoritesPanel({
 
   useEffect(() => {
     const el = panelRef.current;
-    if (!el || !isDetailView) return;
+    if (!el) return;
     const preventHorizontalDefault = (e: TouchEvent) => {
-      if (!isDetailView) return;
       // Don't interfere with native scroll when touch started inside a scrollable area
       if (startedInScrollable.current) return;
       const touch = e.touches[0];
       if (!touch) return;
       const dx = touch.clientX - swipeStartX.current;
-      if (Math.abs(dx) > 8) {
+      const dy = touch.clientY - touchStartY.current;
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
         e.preventDefault();
       }
     };
@@ -265,8 +286,6 @@ export default function FavoritesPanel({
   // favourite bus in each saved-stop row (falling back to the next arrival).
   const [listFavBuses, setListFavBuses] = useState<Map<string, Set<string>>>(new Map());
   const stopCodesKey = stops.map((s) => s.stop.stop_code).join(",");
-
-  const [activeTab, setActiveTab] = useState<"nearby" | "stops">("nearby");
 
   // All-stops fallback: populated by getStops + per-stop getArrivals when
   // the user is on the Nearby tab with location. Always fetched (regardless
@@ -756,6 +775,7 @@ export default function FavoritesPanel({
 
         {/* List view */}
         {!isDetailView && (
+          <div key={activeTab} className="panel-tab-content flex-1 flex flex-col overflow-hidden">
           <>
             {loading && stops.length === 0 && (
               <div className="flex-1 flex flex-col gap-3 p-4">
@@ -1024,6 +1044,7 @@ export default function FavoritesPanel({
               </div>
             )}
           </>
+          </div>
         )}
       </aside>
 

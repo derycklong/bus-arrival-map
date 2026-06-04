@@ -542,6 +542,16 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
   box-shadow: 0 2px 6px var(--color-accent-soft);
 }
 
+/* Tab content slide-in animation when switching via swipe or tap */
+@keyframes panelTabIn {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.panel-tab-content {
+  animation: panelTabIn 0.2s ease-out;
+}
+
 .panel-tab svg { flex-shrink: 0; }
 
 .panel-tab-count {

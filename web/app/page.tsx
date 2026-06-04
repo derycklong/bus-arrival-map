@@ -163,6 +163,14 @@ export default function Home() {
     window.history.replaceState(null, "", window.location.href);
     document.body.classList.add("no-swipe-back");
 
+    // Intercept browser back button: if the user tries to leave the map view,
+    // push the current state back so they stay on the map. This prevents the
+    // BFCache or service-worker-cached auth page from appearing on back nav.
+    function handlePopState() {
+      window.history.pushState(null, "", window.location.href);
+    }
+    window.addEventListener("popstate", handlePopState);
+
     // Block iOS edge-swipe navigation gestures
     const root = document.querySelector("div.app-shell") || document.body.firstElementChild;
     function handleTouchStart(e: TouchEvent) {
@@ -178,6 +186,7 @@ export default function Home() {
 
     return () => {
       document.body.classList.remove("no-swipe-back");
+      window.removeEventListener("popstate", handlePopState);
       if (root) {
         (root as HTMLElement).removeEventListener("touchstart", handleTouchStart);
       }
@@ -199,7 +208,12 @@ export default function Home() {
   function handleAuth(_token: string, user: string) {
     setUsername(user);
     setSessionExpiredMessage("");
+    // Overwrite the auth page in the history stack so back button
+    // doesn't return to the login screen (BFCache / SW can still
+    // restore it otherwise). The popstate handler in the map-view
+    // effect re-pushes to neutralize any remaining back entries.
     window.history.replaceState(null, "", window.location.href);
+    window.history.pushState(null, "", window.location.href);
     setView("map");
   }
 
