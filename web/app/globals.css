@@ -1,49 +1,38 @@
 @import "tailwindcss";
 
 /* ── Design Tokens ───────────────────────────────────────────── */
+/* Defaults match the OpenCode theme in night (dark) mode so SSR is stable.
+   At runtime, the theme system in lib/apply-theme.ts writes inline values
+   onto :root for the user's selected theme + mode. */
 
 :root {
-  --color-card: #ffffff;
-  --color-border: rgba(0, 0, 0, 0.06);
-  --color-text: #0f172a;
-  --color-accent: #2563eb;
-  --color-bg: #f1f5f9;
-  --color-surface: rgba(255, 255, 255, 0.85);
-  --color-surface-hover: #f8fafc;
-  --color-text-secondary: #64748b;
-  --color-text-muted: #94a3b8;
-  --color-border-strong: #e2e8f0;
-  --color-glass-border: rgba(255, 255, 255, 0.5);
-  --color-glass-shadow: rgba(15, 23, 42, 0.08);
-  --color-fav: #f59e0b;
-  --color-fav-bg: rgba(245, 158, 11, 0.1);
-  --color-success: #10b981;
-  --color-danger: #ef4444;
-  --color-danger-bg: rgba(239, 68, 68, 0.1);
-}
-
-:root[data-theme="dark"] {
-  /* Night palette */
-  --color-bg: #000000;
-  --color-surface: rgba(24, 26, 32, 0.88);
-  --color-surface-hover: rgba(30, 32, 38, 0.92);
+  --color-card: #141414;
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-text: #eeeeee;
+  --color-accent: #fab283;
+  --color-accent-hover: #d4905e;
+  --color-accent-soft: rgba(250, 178, 131, 0.18);
+  --color-bg: #0a0a0a;
+  --color-surface: rgba(20, 20, 20, 0.88);
+  --color-surface-hover: rgba(30, 30, 30, 0.92);
+  --color-text-secondary: #808080;
+  --color-text-muted: #707070;
+  --color-border-strong: #3c3c3c;
   --color-glass-border: rgba(255, 255, 255, 0.08);
   --color-glass-shadow: rgba(0, 0, 0, 0.4);
-  --color-text: #f8fafc;
-  --color-text-secondary: #9ca3af;
-  --color-text-muted: #64748b;
-  --color-border-strong: rgba(255, 255, 255, 0.12);
-  --color-accent: #3b82f6;
-  --color-accent-hover: #2563eb;
-  --color-danger: #ef4444;
-  --color-danger-bg: rgba(239, 68, 68, 0.1);
   --color-fav: #f59e0b;
-  --color-fav-bg: rgba(251, 191, 36, 0.12);
+  --color-fav-bg: rgba(245, 158, 11, 0.16);
+  --color-fav-border: rgba(245, 158, 11, 0.5);
+  --color-success: #7fd88f;
+  --color-success-bg: rgba(127, 216, 143, 0.12);
+  --color-danger: #e06c75;
+  --color-danger-bg: rgba(224, 108, 117, 0.12);
   --color-badge-op-border: rgba(255, 255, 255, 0.18);
+  background: var(--color-bg);
 }
 
-:root[data-theme="dark"] body {
-  background-color: #000000;
+html, body {
+  background: var(--color-bg);
 }
 
 /* ── Base ────────────────────────────────────────────────────── */
@@ -199,16 +188,11 @@ button { -webkit-tap-highlight-color: transparent; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--color-glass-border);
+  background: var(--color-surface);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-}
-
-:root[data-theme="dark"] .app-panel {
-  background: rgba(24, 26, 32, 0.72);
-  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px var(--color-glass-shadow);
 }
 
 /* ── Favorites panel ─────────────────────────────────────────── */
@@ -435,6 +419,7 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
 
 .favorite-row-buses {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 5px;
   min-width: 0;
@@ -443,6 +428,7 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
 .favorite-bus-chip {
   flex: 1 1 0;
   min-width: 0;
+  max-width: calc(50% - 3px);
   display: flex;
   align-items: center;
   gap: 5px;
@@ -552,7 +538,7 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
   background: var(--color-accent);
   color: #fff;
   border-color: var(--color-accent);
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 6px var(--color-accent-soft);
 }
 
 .panel-tab svg { flex-shrink: 0; }
@@ -566,15 +552,16 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
   padding: 0 5px;
   border-radius: 999px;
   background: var(--color-border-strong);
-  color: var(--color-text-secondary);
+  color: var(--color-text);
   font-size: 10px;
   font-weight: 800;
   line-height: 1;
 }
 
 .panel-tab.is-active .panel-tab-count {
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
+  background: var(--color-card);
+  color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 /* ── Upcoming (next 5) list ──────────────────────────────────── */
@@ -619,14 +606,23 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
 }
 
 .upcoming-row-top {
-  display: flex;
+  display: grid;
+  grid-template-columns: 12px 42px 36px minmax(0, 1fr) 14px;
+  column-gap: 10px;
   align-items: center;
-  gap: 6px;
+  justify-items: center;
+  text-align: center;
   min-width: 0;
+  font-size: 11px;
+}
+
+.upcoming-row-top .upcoming-dest {
+  justify-self: stretch;
+  text-align: left;
 }
 
 .upcoming-dest {
-  flex: 1;
+  flex: none;
   min-width: 0;
   color: var(--color-text);
   font-size: 13px;
@@ -725,13 +721,14 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
   letter-spacing: 0.2px;
 }
 
-.upcoming-group-empty {
-  padding: 12px 14px 14px 17px;
+.upcoming-banner {
+  padding: 10px 14px 10px 17px;
   font-size: 11px;
-  color: var(--color-text-muted);
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-hover);
   border-bottom: 1px solid var(--color-border-strong);
-  background: var(--color-surface);
+  line-height: 1.4;
 }
 
 /* ── Arrivals table ──────────────────────────────────────────── */
@@ -830,7 +827,7 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
 }
 
 .arrivals-table tbody tr.is-bus-fav {
-  background: rgba(245, 158, 11, 0.08);
+  background: var(--color-fav-bg);
 }
 
 .destination-code {
@@ -1313,13 +1310,8 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
     overscroll-behavior-x: none;
     -webkit-backdrop-filter: blur(18px);
     backdrop-filter: blur(18px);
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-  }
-
-  :root[data-theme="dark"] .favorites-panel {
-    background: rgba(24, 26, 32, 0.72);
-    border-color: rgba(255, 255, 255, 0.08);
+    background: var(--color-surface);
+    border: 1px solid var(--color-glass-border);
   }
 
   .favorites-panel.is-detail { height: 44vh; max-height: 420px; }
@@ -1436,3 +1428,7 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
 
   .favorites-panel { width: 320px; }
 }
+
+/* ── Theme picker ─────────────────────────────────────────────── */
+/* Styles live in app/theme-picker.css; @tailwindcss/postcss was
+   stripping the block when it sat at the end of globals.css. */

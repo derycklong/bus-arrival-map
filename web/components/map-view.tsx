@@ -82,10 +82,10 @@ interface MapViewProps {
   selectedStop: StopBase | null;
   onSelectStop: (stop: StopBase) => void;
   onLocationChange?: (loc: { lat: number; lng: number }) => void;
-  theme: "light" | "dark";
+  mode: "light" | "dark";
 }
 
-export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop, onLocationChange, theme }: MapViewProps) {
+export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop, onLocationChange, mode }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -98,7 +98,7 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
   const favCodesRef = useRef(favouriteStopCodes);
   const locationWatchId = useRef<number | null>(null);
   const lastLocation = useRef<{ lat: number; lng: number } | null>(null);
-  const themeRef = useRef(theme);
+  const modeRef = useRef(mode);
   const onLocationChangeRef = useRef(onLocationChange);
   const [isLocating, setIsLocating] = useState(false);
   const [geolocationDenied, setGeolocationDenied] = useState(false);
@@ -110,7 +110,7 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
     selectedStopRef.current = selectedStop;
     onSelectStopRef.current = onSelectStop;
     favCodesRef.current = favouriteStopCodes;
-    themeRef.current = theme;
+    modeRef.current = mode;
     onLocationChangeRef.current = onLocationChange;
   });
 
@@ -119,9 +119,9 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
     if (tileLayerRef.current) {
       mapInstance.current.removeLayer(tileLayerRef.current);
     }
-    const tileUrl = theme === "dark" ? DARK_TILES : LIGHT_TILES;
+    const tileUrl = mode === "dark" ? DARK_TILES : LIGHT_TILES;
     tileLayerRef.current = L.tileLayer(tileUrl, { maxZoom: 19, keepBuffer: 4 }).addTo(mapInstance.current);
-    const bg = theme === "dark" ? "#000000" : "#f2efec";
+    const bg = mode === "dark" ? "#000000" : "#f2efec";
     mapInstance.current.getContainer().style.background = bg;
     const tilePane = mapInstance.current.getPane("tilePane");
     if (tilePane) tilePane.style.background = bg;
@@ -129,13 +129,13 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
     requestAnimationFrame(() => {
       mapInstance.current?.invalidateSize({ pan: false });
     });
-  }, [theme]);
+  }, [mode]);
 
   const renderStops = useCallback((stops: Stop[], map: L.Map, selectedCode: string | null, favCodes: Set<string>) => {
     markersLayer.current?.clearLayers();
     currentStops.current = stops;
 
-    const stopColor = theme === "dark" ? "#60a5fa" : "#2563eb";
+    const stopColor = mode === "dark" ? "#60a5fa" : "#2563eb";
     const selectedColor = "#ef4444";
     const favColor = "#f59e0b";
 
@@ -149,9 +149,22 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
       marker.on("click", () => onSelectStopRef.current(stop));
       markersLayer.current?.addLayer(marker);
     }
-  }, [theme]);
+  }, [mode]);
+
+  // Mirror renderStops into a ref so loadStops can stay stable (empty deps).
+  // Without this, every tile-mode toggle re-creates loadStops → re-creates
+  // the main init effect → calls map.remove() on the live map → any
+  // moveend-scheduled loadStops fires on a disposed map and throws
+  // "Cannot read properties of undefined (reading '_leaflet_pos')".
+  const renderStopsRef = useRef(renderStops);
+  renderStopsRef.current = renderStops;
 
   const loadStops = useCallback((map: L.Map) => {
+    // Defensive guard: a previous tile-mode toggle may have torn down the
+    // map while a setTimeout-scheduled loadStops was still pending.
+    if (!map || (map as unknown as { _mapPane?: { _leaflet_pos?: unknown } })._mapPane?._leaflet_pos === undefined) {
+      return;
+    }
     setLoadError(false);
     // Show loading indicator with delay to avoid flicker
     if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
@@ -172,14 +185,14 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
         if (loadingTimerRef.current) { clearTimeout(loadingTimerRef.current); loadingTimerRef.current = null; }
         const stops = data.stops || [];
         stops.sort((a, b) => (a.distance_m ?? 999999) - (b.distance_m ?? 999999));
-        renderStops(stops, map, selectedStopRef.current?.stop_code ?? null, favCodesRef.current);
+        renderStopsRef.current(stops, map, selectedStopRef.current?.stop_code ?? null, favCodesRef.current);
       })
       .catch(() => {
         setIsLoadingStops(false);
         setLoadError(true);
         if (loadingTimerRef.current) { clearTimeout(loadingTimerRef.current); loadingTimerRef.current = null; }
       });
-  }, [renderStops]);
+  }, []);
 
   useEffect(() => {
     if (!mapInstance.current) return;
@@ -215,16 +228,16 @@ export default function MapView({ favouriteStopCodes, selectedStop, onSelectStop
       attributionControl: false,
     });
 
-    const tileUrl = themeRef.current === "dark" ? DARK_TILES : LIGHT_TILES;
+    const tileUrl = modeRef.current === "dark" ? DARK_TILES : LIGHT_TILES;
     tileLayerRef.current = L.tileLayer(tileUrl, { maxZoom: 19, keepBuffer: 4 }).addTo(map);
 
     markersLayer.current = L.layerGroup().addTo(map);
     locationLayer.current = L.layerGroup().addTo(map);
     mapInstance.current = map;
 
-    map.getContainer().style.background = themeRef.current === "dark" ? "#000000" : "#f2efec";
+    map.getContainer().style.background = modeRef.current === "dark" ? "#000000" : "#f2efec";
     const tilePane = map.getPane("tilePane");
-    if (tilePane) tilePane.style.background = themeRef.current === "dark" ? "#000000" : "#f2efec";
+    if (tilePane) tilePane.style.background = modeRef.current === "dark" ? "#000000" : "#f2efec";
 
     const container = map.getContainer();
     let disposed = false;

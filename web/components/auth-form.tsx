@@ -94,7 +94,7 @@ export default function AuthForm({ onAuth, sessionExpiredMessage }: AuthFormProp
     : "Save your favorite stops across devices.";
 
   return (
-    <div className="auth-screen fixed inset-0 z-50 overflow-y-auto" style={{ background: "rgba(0,0,0,0.6)" }}>
+    <div className="auth-screen fixed inset-0 z-50 overflow-y-auto" style={{ background: "var(--color-bg)" }}>
       <div className="auth-screen-inner flex items-center justify-center px-4 py-6">
         <form
           onSubmit={handleSubmit}

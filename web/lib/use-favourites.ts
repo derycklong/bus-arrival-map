@@ -75,7 +75,7 @@ export function useFavourites() {
   const startPolling = useCallback(() => {
     stopPolling();
     fetchFavourites();
-    pollingRef.current = setInterval(fetchFavourites, 30000);
+    pollingRef.current = setInterval(fetchFavourites, 10000);
   }, [fetchFavourites, stopPolling]);
 
   useEffect(() => {

@@ -1,7 +1,10 @@
 ﻿"use client";
 
+import { useState, useEffect, useRef } from "react";
+
 interface DurationTextProps {
   ms: number | null;
+  time?: string | null;
 }
 
 const NEUTRAL = "var(--color-text-muted)";
@@ -14,16 +17,44 @@ function colorForMinutes(mins: number): string {
   return "#ef4444";
 }
 
-export default function DurationText({ ms }: DurationTextProps) {
-  if (ms === null || ms === undefined) {
+function msFromTime(time: string): number {
+  return new Date(time).getTime() - Date.now();
+}
+
+export default function DurationText({ ms, time }: DurationTextProps) {
+  const [liveMs, setLiveMs] = useState<number | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!time) {
+      setLiveMs(null);
+      return;
+    }
+    const tick = () => setLiveMs(msFromTime(time));
+    tick();
+    const cur = msFromTime(time);
+    if (cur < 60000 && cur >= 0) {
+      intervalRef.current = setInterval(tick, 1000);
+    }
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [time]);
+
+  const effectiveMs = time ? liveMs : ms;
+
+  if (effectiveMs === null || effectiveMs === undefined) {
     return <span style={{ color: NEUTRAL, fontSize: "11px", fontWeight: 600 }}>---</span>;
   }
-  if (ms < 0) {
+  if (effectiveMs < 0) {
     return <span style={{ color: "var(--color-success)", fontSize: "11px", fontWeight: 600 }}>Arr</span>;
   }
-  const mins = Math.floor(ms / 60000);
+  const mins = Math.floor(effectiveMs / 60000);
   if (mins === 0) {
-    const secs = Math.floor(ms / 1000);
+    const secs = Math.floor(effectiveMs / 1000);
     return (
       <span style={{ color: "var(--color-success)", fontSize: "11px", fontWeight: 600 }}>{secs}s</span>
     );

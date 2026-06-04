@@ -614,8 +614,8 @@ export default function FavoritesPanel({
                         <td className="bus-number">
                             <span className="bus-badge" data-op={svc.operator}>{svc.no}</span>
                           </td>
-                        <td><DurationText ms={svc.next?.duration_ms ?? null} /></td>
-                        <td><DurationText ms={svc.subsequent?.duration_ms ?? null} /></td>
+                        <td><DurationText ms={svc.next?.duration_ms ?? null} time={svc.next?.time} /></td>
+                        <td><DurationText ms={svc.subsequent?.duration_ms ?? null} time={svc.subsequent?.time} /></td>
                         <td className="destination-code">
                           {svc.next?.destination_name || svc.next?.destination_code || ""}
                         </td>
@@ -712,7 +712,7 @@ export default function FavoritesPanel({
                               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                             </svg>
                             <span className="bus-badge" data-op={u.service.operator}>{u.service.no}</span>
-                            <DurationText ms={u.durationMs} />
+                            <DurationText ms={u.durationMs} time={u.service.next?.time} />
                             <span className="upcoming-dest">
                               {u.service.next?.destination_name || u.service.next?.destination_code || "—"}
                             </span>
@@ -822,7 +822,7 @@ export default function FavoritesPanel({
                                         </svg>
                                       )}
                                       <span className="bus-badge" data-op={svc.operator}>{svc.no}</span>
-                                      <DurationText ms={svc.next?.duration_ms ?? null} />
+                                      <DurationText ms={svc.next?.duration_ms ?? null} time={svc.next?.time} />
                                       <span className="favorite-bus-dest">
                                         {svc.next?.destination_name || svc.next?.destination_code || "—"}
                                       </span>
@@ -898,7 +898,7 @@ export default function FavoritesPanel({
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
               <span className="bus-badge" data-op={soonestFavBus.service.operator}>{soonestFavBus.service.no}</span>
-              <DurationText ms={soonestFavBus.durationMs} />
+              <DurationText ms={soonestFavBus.durationMs} time={soonestFavBus.service.next?.time} />
             </span>
           )}
         </button>
