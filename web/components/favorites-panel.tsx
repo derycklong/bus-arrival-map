@@ -81,6 +81,8 @@ interface FavoritesPanelProps {
   onDismissedChange?: (dismissed: boolean) => void;
   onExpandedChange?: (expanded: boolean) => void;
   userLocation?: { lat: number; lng: number } | null;
+  favouriteBusesByStop: Map<string, Set<string>>;
+  onUpdateFavouriteBuses: (stopCode: string, mut: (set: Set<string>) => void) => void;
 }
 
 export default function FavoritesPanel({
@@ -98,6 +100,8 @@ export default function FavoritesPanel({
   onDismissedChange,
   onExpandedChange,
   userLocation,
+  favouriteBusesByStop,
+  onUpdateFavouriteBuses,
 }: FavoritesPanelProps) {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [confirmUnfav, setConfirmUnfav] = useState(false);
@@ -283,11 +287,6 @@ export default function FavoritesPanel({
   const [detailError, setDetailError] = useState(false);
   const [favBuses, setFavBuses] = useState<Set<string>>(new Set());
 
-  // List-view favourite buses, keyed by stop_code. Used to surface the next
-  // favourite bus in each saved-stop row (falling back to the next arrival).
-  const [listFavBuses, setListFavBuses] = useState<Map<string, Set<string>>>(new Map());
-  const stopCodesKey = stops.map((s) => s.stop.stop_code).join(",");
-
   // All-stops fallback: populated by getStops + per-stop getArrivals when
   // the user is on the Nearby tab with location. Always fetched (regardless
   // of whether the user has favourited stops) so the data is ready if the
@@ -386,7 +385,7 @@ export default function FavoritesPanel({
     const favGroups: NearbyGroup[] = [];
     for (const item of stops) {
       if (item.loading || item.error) continue;
-      const stopFavs = listFavBuses.get(item.stop.stop_code);
+      const stopFavs = favouriteBusesByStop.get(item.stop.stop_code);
       if (!stopFavs || stopFavs.size === 0) continue;
       const d = haversineMeters(userLocation, { lat: item.stop.lat, lng: item.stop.lng });
       if (d > NEARBY_RADIUS_M) continue;
@@ -416,7 +415,7 @@ export default function FavoritesPanel({
     }
     groups.sort((a, b) => a.distanceM - b.distanceM);
     return groups;
-  }, [nearbyAllGroups, userLocation, stops, listFavBuses]);
+  }, [nearbyAllGroups, userLocation, stops, favouriteBusesByStop]);
   const nearbyGroups = nearbyBuses;
   const nearbyCount = nearbyGroups.reduce((n, g) => n + g.buses.length, 0);
 
@@ -505,37 +504,6 @@ export default function FavoritesPanel({
     };
   }, [detailStopCode]);
 
-  useEffect(() => {
-    if (isDetailView) return;
-    let cancelled = false;
-    Promise.allSettled(
-      stops.map((s) =>
-        getFavouriteBuses(s.stop.stop_code)
-          .then((data) => ({ code: s.stop.stop_code, nos: new Set(data.bus_nos || []) }))
-          .catch(() => ({ code: s.stop.stop_code, nos: new Set<string>() }))
-      )
-    ).then((results) => {
-      if (cancelled) return;
-      const next = new Map<string, Set<string>>();
-      for (const r of results) {
-        if (r.status === "fulfilled") next.set(r.value.code, r.value.nos);
-      }
-      setListFavBuses(next);
-    });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-fetch only when the set of stop codes changes
-  }, [stopCodesKey, isDetailView]);
-
-  function updateListFavForStop(stopCode: string, mut: (set: Set<string>) => void) {
-    setListFavBuses((prev) => {
-      const next = new Map(prev);
-      const cur = new Set(next.get(stopCode) || []);
-      mut(cur);
-      next.set(stopCode, cur);
-      return next;
-    });
-  }
-
   const sortedDetail = (() => {
     const sd = [...detailServices].sort(
       (a, b) => (a.next?.duration_ms ?? 999999) - (b.next?.duration_ms ?? 999999)
@@ -557,17 +525,17 @@ export default function FavoritesPanel({
     setConfirmBusFav(null);
     if (action === "remove") {
       setFavBuses((prev) => { const next = new Set(prev); next.delete(busNo); return next; });
-      updateListFavForStop(selectedStop.stop_code, (s) => s.delete(busNo));
+      onUpdateFavouriteBuses(selectedStop.stop_code, (s) => s.delete(busNo));
       removeFavouriteBus(selectedStop.stop_code, busNo).catch(() => {
         setFavBuses((prev) => { const next = new Set(prev); next.add(busNo); return next; });
-        updateListFavForStop(selectedStop.stop_code, (s) => s.add(busNo));
+        onUpdateFavouriteBuses(selectedStop.stop_code, (s) => s.add(busNo));
       });
     } else {
       setFavBuses((prev) => { const next = new Set(prev); next.add(busNo); return next; });
-      updateListFavForStop(selectedStop.stop_code, (s) => s.add(busNo));
+      onUpdateFavouriteBuses(selectedStop.stop_code, (s) => s.add(busNo));
       addFavouriteBus(selectedStop.stop_code, busNo).catch(() => {
         setFavBuses((prev) => { const next = new Set(prev); next.delete(busNo); return next; });
-        updateListFavForStop(selectedStop.stop_code, (s) => s.delete(busNo));
+        onUpdateFavouriteBuses(selectedStop.stop_code, (s) => s.delete(busNo));
       });
     }
   }
@@ -961,7 +929,7 @@ export default function FavoritesPanel({
             {activeTab === "stops" && stops.length > 0 && (
               <div className="favorites-list" id="panel-stops" role="tabpanel">
                 {stopsWithDistance.map(({ item, distanceM }) => {
-                  const stopFavs = listFavBuses.get(item.stop.stop_code);
+                  const stopFavs = favouriteBusesByStop.get(item.stop.stop_code);
                   const metaParts = [item.stop.road, `Stop ${item.stop.stop_code}`].filter(Boolean);
                   return (
                     <div

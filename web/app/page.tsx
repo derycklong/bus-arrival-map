@@ -39,15 +39,26 @@ export default function Home() {
   const [themeId, setThemeId] = useState<string>(DEFAULT_THEME_ID);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [onlyShowFavorites, setOnlyShowFavorites] = useState(false);
 
   const handleLocationChange = useCallback((loc: { lat: number; lng: number }) => {
     setUserLocation(loc);
+  }, []);
+
+  const toggleOnlyFavorites = useCallback(() => {
+    setOnlyShowFavorites((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("onlyShowFavorites", next ? "1" : "0"); } catch {}
+      return next;
+    });
   }, []);
 
   const {
     stops,
     loading: favsLoading,
     error: favsError,
+    favouriteBusesByStop,
+    updateFavouriteBusesForStop,
     fetchFavourites,
     addFavouriteStop,
     removeFavouriteStop,
@@ -59,6 +70,57 @@ export default function Home() {
     () => new Set(stops.map((s) => s.stop.stop_code)),
     [stops]
   );
+
+  const favouriteStops = useMemo(
+    () => stops.map((s) => s.stop),
+    [stops]
+  );
+
+  // Flatten favourite buses across all favourite stops, taking only live
+  // (non-zero) positions from `next` and `subsequent`. The map decides
+  // whether to render them based on proximity to the user.
+  const favouriteBusPositions = useMemo(() => {
+    const out: {
+      no: string;
+      operator: string;
+      lat: number;
+      lng: number;
+      destinationName: string;
+      stopCode: string;
+      type: "next" | "subsequent";
+    }[] = [];
+    for (const item of stops) {
+      if (item.loading || item.error) continue;
+      const favNos = favouriteBusesByStop.get(item.stop.stop_code);
+      if (!favNos || favNos.size === 0) continue;
+      for (const svc of item.services) {
+        if (!favNos.has(svc.no)) continue;
+        if (svc.next?.lat && svc.next?.lng) {
+          out.push({
+            no: svc.no,
+            operator: svc.operator,
+            lat: svc.next.lat,
+            lng: svc.next.lng,
+            destinationName: svc.next.destination_name || "",
+            stopCode: item.stop.stop_code,
+            type: "next",
+          });
+        }
+        if (svc.subsequent?.lat && svc.subsequent?.lng) {
+          out.push({
+            no: svc.no,
+            operator: svc.operator,
+            lat: svc.subsequent.lat,
+            lng: svc.subsequent.lng,
+            destinationName: svc.subsequent.destination_name || "",
+            stopCode: item.stop.stop_code,
+            type: "subsequent",
+          });
+        }
+      }
+    }
+    return out;
+  }, [stops, favouriteBusesByStop]);
 
   const toggleMapMode = useCallback(() => {
     setMapMode((prev) => {
@@ -100,6 +162,11 @@ export default function Home() {
       const storedId = localStorage.getItem("themeId");
       if (storedId && isValidThemeId(storedId)) {
         setThemeId(storedId);
+      }
+      const storedOnlyFav = localStorage.getItem("onlyShowFavorites");
+      if (storedOnlyFav === "1") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-hydration sync from localStorage
+        setOnlyShowFavorites(true);
       }
     } catch { /* noop */ }
 
@@ -269,7 +336,18 @@ export default function Home() {
               <circle cx="15.5" cy="15" r="1.1" fill="currentColor" stroke="none" />
             </svg>
           </button>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-text-muted)", flexShrink: 0 }}>
+          <button
+            onClick={toggleOnlyFavorites}
+            className={"theme-toggle-button" + (onlyShowFavorites ? " is-active" : "")}
+            title={onlyShowFavorites ? "Show all bus stops" : "Show favourites only"}
+            aria-label={onlyShowFavorites ? "Show all bus stops" : "Show favourites only"}
+            aria-pressed={onlyShowFavorites}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill={onlyShowFavorites ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </button>
+          <svg className="app-user-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-text-muted)", flexShrink: 0 }}>
             <circle cx="12" cy="8" r="4"/>
             <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>
           </svg>
@@ -291,13 +369,19 @@ export default function Home() {
         onFavouriteAdd={addFavouriteStop}
         onFavouriteRemove={removeFavouriteStop}
         userLocation={userLocation}
+        favouriteBusesByStop={favouriteBusesByStop}
+        onUpdateFavouriteBuses={updateFavouriteBusesForStop}
       />
       <MapView
         favouriteStopCodes={favouriteStopCodes}
+        favouriteStops={favouriteStops}
+        favouriteBuses={favouriteBusPositions}
+        userLocation={userLocation}
         selectedStop={selectedStop}
         onSelectStop={handleSelectStop}
         onLocationChange={handleLocationChange}
         mode={mapMode}
+        onlyShowFavorites={onlyShowFavorites}
       />
       {pickerOpen && (
         <ThemePicker

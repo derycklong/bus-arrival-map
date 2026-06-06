@@ -176,6 +176,19 @@ button { -webkit-tap-highlight-color: transparent; }
   color: var(--color-accent);
 }
 
+.app-user button.theme-toggle-button.is-active {
+  background: var(--color-fav);
+  border-color: var(--color-fav);
+  color: #fff;
+}
+
+.app-user button.theme-toggle-button.is-active:hover {
+  background: var(--color-fav);
+  border-color: var(--color-fav);
+  color: #fff;
+  filter: brightness(1.08);
+}
+
 .app-user button.theme-toggle-button svg {
   flex-shrink: 0;
   pointer-events: none;
@@ -498,6 +511,77 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
 .bus-badge[data-op="TTS"]   { background: rgba(34, 197, 94, 0.85); }
 .bus-badge[data-op="GAS"]  { background: rgba(245, 158, 11, 0.85); }
 .bus-badge[data-op=""]     { background: var(--color-accent); }
+
+/* ── Live bus marker on the map (shown near a favourite stop) ── */
+
+.bus-map-marker-hit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  pointer-events: auto;
+}
+.bus-map-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: white;
+  background: rgba(37, 99, 235, 0.95);
+  border: 2px solid #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+  transform: translateZ(0);
+}
+.bus-map-marker-no {
+  pointer-events: none;
+  user-select: none;
+}
+.bus-map-marker[data-op="SBST"] { background: rgba(139, 92, 246, 0.95); }
+.bus-map-marker[data-op="SMRT"] { background: rgba(239, 68, 68, 0.95); }
+.bus-map-marker[data-op="TTS"]   { background: rgba(34, 197, 94, 0.95); }
+.bus-map-marker[data-op="GAS"]  { background: rgba(245, 158, 11, 0.95); }
+.bus-map-marker[data-op=""]     { background: var(--color-accent); }
+
+/* "Subsequent" bus: white fill with operator-colored border + text so it
+   reads as a bus for the same operator but visually distinct from the
+   solid (next) marker. */
+.bus-map-marker.is-subsequent {
+  background: #fff;
+  color: var(--op-color, var(--color-accent));
+  text-shadow: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  border-width: 2.5px;
+  border-color: currentColor;
+}
+.bus-map-marker.is-subsequent[data-op="SBST"] { color: rgba(139, 92, 246, 1); }
+.bus-map-marker.is-subsequent[data-op="SMRT"] { color: rgba(239, 68, 68, 1); }
+.bus-map-marker.is-subsequent[data-op="TTS"]   { color: rgba(34, 197, 94, 1); }
+.bus-map-marker.is-subsequent[data-op="GAS"]  { color: rgba(245, 158, 11, 1); }
+
+/* Nicer Leaflet tooltip for bus markers (overrides the default white box) */
+.leaflet-tooltip.bus-tooltip {
+  background: rgba(20, 20, 30, 0.92);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+.leaflet-tooltip.bus-tooltip::before {
+  border-top-color: rgba(20, 20, 30, 0.92);
+}
 
 /* ── Panel tabs (Nearby / Stops) ──────────────────────────── */
 
@@ -1511,6 +1595,7 @@ button.icon-button[aria-label="Close favorites panel"] { display: none; }
     padding-top: max(24px, env(safe-area-inset-top));
     padding-bottom: max(24px, env(safe-area-inset-bottom));
   }
+  .app-user-icon { display: none; }
   .auth-card { padding: 28px 22px 22px; border-radius: 20px; }
   .auth-title { font-size: 22px; }
   .auth-bg-blob { filter: blur(60px); }

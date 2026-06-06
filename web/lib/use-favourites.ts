@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import {
   getFavourites,
   getArrivals,
+  getFavouriteBuses,
   addFavourite,
   removeFavourite,
   FavouriteStop,
@@ -29,6 +30,7 @@ export function useFavourites() {
     loading: true,
     error: false,
   });
+  const [favouriteBusesByStop, setFavouriteBusesByStop] = useState<Map<string, Set<string>>>(new Map());
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopsRef = useRef(state.stops);
 
@@ -77,6 +79,48 @@ export function useFavourites() {
     fetchFavourites();
     pollingRef.current = setInterval(fetchFavourites, 10000);
   }, [fetchFavourites, stopPolling]);
+
+  // Keep favouriteBusesByStop in sync with the current set of fav stops.
+  // Refetched whenever the stop list changes; the per-stop getFavouriteBuses
+  // call is cheap and the data is small.
+  const stopCodesKey = state.stops.map((s) => s.stop.stop_code).join(",");
+  useEffect(() => {
+    if (state.stops.length === 0) {
+      setFavouriteBusesByStop(new Map());
+      return;
+    }
+    let cancelled = false;
+    Promise.allSettled(
+      state.stops.map((s) =>
+        getFavouriteBuses(s.stop.stop_code)
+          .then((data) => ({ code: s.stop.stop_code, nos: new Set(data.bus_nos || []) }))
+          .catch(() => ({ code: s.stop.stop_code, nos: new Set<string>() }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      const next = new Map<string, Set<string>>();
+      for (const r of results) {
+        if (r.status === "fulfilled") next.set(r.value.code, r.value.nos);
+      }
+      setFavouriteBusesByStop(next);
+    });
+    return () => { cancelled = true; };
+  }, [stopCodesKey, state.stops.length]);
+
+  // Optimistic update helper for FavoritesPanel to keep map + panel in sync
+  // when the user stars/unstars a bus from the detail view.
+  const updateFavouriteBusesForStop = useCallback(
+    (stopCode: string, mut: (set: Set<string>) => void) => {
+      setFavouriteBusesByStop((prev) => {
+        const next = new Map(prev);
+        const cur = new Set(next.get(stopCode) || []);
+        mut(cur);
+        next.set(stopCode, cur);
+        return next;
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     return stopPolling;
@@ -135,6 +179,8 @@ export function useFavourites() {
     stops: state.stops,
     loading: state.loading,
     error: state.error,
+    favouriteBusesByStop,
+    updateFavouriteBusesForStop,
     fetchFavourites,
     addFavouriteStop,
     removeFavouriteStop,

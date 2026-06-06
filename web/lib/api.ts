@@ -71,6 +71,11 @@ export interface Bus {
   type: string;
   destination_code: string;
   destination_name: string;
+  lat: number;
+  lng: number;
+  monitored: number;
+  visit_number: string;
+  origin_code: string;
 }
 
 export interface Service {

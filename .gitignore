@@ -6,3 +6,8 @@ node_modules/
 venv/
 .planning/
 .reasonix/
+# One-off Playwright/Puppeteer screenshot captures (kept locally, not in repo)
+*.png
+# Local LTA-backed bus stop database (rebuilt by backend/setup_db.py)
+data/bus_stops.db
+data/bus_stops.db-*
