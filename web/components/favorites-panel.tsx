@@ -117,20 +117,22 @@ export default function FavoritesPanel({
   const swipeCurrentX = useRef(0);
   const swipingHorizontal = useRef(false);
   const startedInScrollable = useRef(false);
+  const startedInHeader = useRef(false);
 
   const [activeTab, setActiveTab] = useState<"nearby" | "stops">("nearby");
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
     const scrollable = target.closest(".arrivals-table-wrap, .favorites-list");
+    // Only touches on the drag handle / panel header can resize the
+    // panel. Touches on the scrollable list area are for scrolling only
+    // and never drive the panel height.
+    const isHeaderArea = !!target.closest(".panel-drag-handle, .panel-header");
+    startedInHeader.current = isHeaderArea;
     swipeStartX.current = e.touches[0].clientX;
     swipeCurrentX.current = e.touches[0].clientX;
     swipingHorizontal.current = false;
     startedInScrollable.current = !!scrollable;
-    if (scrollable && scrollable.scrollTop > 0) {
-      touchStartY.current = -999;
-      return;
-    }
     touchStartY.current = e.touches[0].clientY;
     touchCurrentY.current = e.touches[0].clientY;
   }, []);
@@ -140,7 +142,7 @@ export default function FavoritesPanel({
     swipeCurrentX.current = e.touches[0].clientX;
     const dx = swipeCurrentX.current - swipeStartX.current;
     const dy = touchCurrentY.current - touchStartY.current;
-    if (isDetailView && Math.abs(dx) > 15 && (touchStartY.current === -999 || Math.abs(dx) > Math.abs(dy))) {
+    if (isDetailView && Math.abs(dx) > 15 && (Math.abs(dx) > Math.abs(dy))) {
       swipingHorizontal.current = true;
       return;
     }
@@ -149,8 +151,12 @@ export default function FavoritesPanel({
       swipingHorizontal.current = true;
       return;
     }
-    if (touchStartY.current === -999 || !isDetailView) return;
-    if (startedInScrollable.current) return;
+    // Only drive the panel drag when the touch started on the header /
+    // drag handle. Touches on the list area are for scrolling, not resize.
+    if (!startedInHeader.current) {
+      touchStartY.current = touchCurrentY.current;
+      return;
+    }
     if (panelRef.current) {
       if (dy > 0) {
         panelRef.current.style.transform = "translateY(" + dy + "px)";
@@ -193,16 +199,19 @@ export default function FavoritesPanel({
       touchCurrentY.current = 0;
       return;
     }
-    if (touchStartY.current === -999) {
-      touchStartY.current = 0;
-      swipingHorizontal.current = false;
-      swipeStartX.current = 0;
-      swipeCurrentX.current = 0;
-      return;
-    }
     swipingHorizontal.current = false;
     swipeStartX.current = 0;
     swipeCurrentX.current = 0;
+    // Only process vertical swipe (expand/collapse/dismiss) when the
+    // touch started on the panel header/drag handle. Touches that
+    // started on the list area are for scrolling, not panel resize.
+    if (!startedInHeader.current) {
+      startedInHeader.current = false;
+      touchStartY.current = 0;
+      touchCurrentY.current = 0;
+      return;
+    }
+    startedInHeader.current = false;
     const diff = touchCurrentY.current - touchStartY.current;
     if (panelRef.current) {
       panelRef.current.style.transform = "";
@@ -235,8 +244,6 @@ export default function FavoritesPanel({
     const el = panelRef.current;
     if (!el) return;
     const preventHorizontalDefault = (e: TouchEvent) => {
-      // Don't interfere with native scroll when touch started inside a scrollable area
-      if (startedInScrollable.current) return;
       const touch = e.touches[0];
       if (!touch) return;
       const dx = touch.clientX - swipeStartX.current;
@@ -446,10 +453,13 @@ export default function FavoritesPanel({
 
   useEffect(() => {
     if (selectedStop) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset UI on stop change
-      setDismissed(false);
-      onDismissedChange?.(false);
+      if (dismissed) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- reset UI on stop change or re-select
+        setDismissed(false);
+        onDismissedChange?.(false);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dismissed is intentionally excluded: adding it would cause the effect to re-fire on every open/close, undoing the close action.
   }, [selectedStop, onDismissedChange]);
 
   useEffect(() => {
@@ -551,7 +561,10 @@ export default function FavoritesPanel({
         role="complementary"
         aria-label="Bus Arrival Map"
       >
-        {/* Drag handle (mobile) */}
+        {/* Drag handle (mobile) — vertical swipe on this area expands /
+            collapses / dismisses the panel even when the inner list is
+            scrolled. Touches on the list area only swipe the panel when
+            the list is scrolled to the top. */}
         <div className="panel-drag-handle" />
 
         {/* Header */}
@@ -608,7 +621,7 @@ export default function FavoritesPanel({
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                 </button>
                 <button
-                  onClick={onCloseStop}
+                  onClick={() => { setDismissed(true); onDismissedChange?.(true); }}
                   className="icon-button"
                   aria-label="Close stop detail"
                 >
@@ -627,7 +640,7 @@ export default function FavoritesPanel({
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                 </button>
                 <button
-                  onClick={() => { setDismissed(true); onDismissedChange?.(true); }}
+                  onClick={() => { setDismissed(true); onDismissedChange?.(true); onCloseStop(); }}
                   className="icon-button"
                   aria-label="Close favorites panel"
                 >

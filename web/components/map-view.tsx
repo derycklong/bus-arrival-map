@@ -151,6 +151,7 @@ export default function MapView({ favouriteStopCodes, favouriteStops, favouriteB
   const mapInstance = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersLayer = useRef<L.LayerGroup | null>(null);
+  const favStopsLayer = useRef<L.LayerGroup | null>(null);
   const locationLayer = useRef<L.LayerGroup | null>(null);
   const busesLayer = useRef<L.LayerGroup | null>(null);
   const currentStops = useRef<Stop[]>([]);
@@ -218,6 +219,10 @@ export default function MapView({ favouriteStopCodes, favouriteStops, favouriteB
     for (const stop of stops) {
       const isSelected = stop.stop_code === selectedCode;
       const isFav = favCodes.has(stop.stop_code);
+      // Favourite stops live on a dedicated pinned layer (see the effect
+      // below) so they survive zoom-out clears and pan/zoom reloads.
+      // Skip them here to avoid double-rendering.
+      if (isFav) continue;
       // "Favourites only" toggle: skip non-favourite stops entirely. The
       // selected stop is always a favourite in practice (you select from the
       // map), but render it anyway so the selection UI stays consistent.
@@ -370,6 +375,33 @@ export default function MapView({ favouriteStopCodes, favouriteStops, favouriteB
     renderStops(currentStops.current, mapInstance.current, selectedStop?.stop_code ?? null, favouriteStopCodes);
   }, [favouriteStopCodes, selectedStop?.stop_code, onlyShowFavorites, renderStops]);
 
+  // Pinned layer: favourite stops render on a separate LayerGroup that is
+  // NOT cleared on zoom-out or by pan/zoom reloads. The user marked these
+  // stops as favourites precisely to keep track of them, so they stay
+  // visible regardless of where the map is panned or how far it is zoomed
+  // out. Leaflet still clips them to the viewport, so a stop far off-screen
+  // won't appear until the user pans back to it.
+  useEffect(() => {
+    const layer = favStopsLayer.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (favouriteStops.length === 0) return;
+
+    const selectedColor = "#ef4444";
+    const favColor = "#f59e0b";
+    const sel = selectedStop?.stop_code ?? null;
+
+    for (const stop of favouriteStops) {
+      const isSelected = stop.stop_code === sel;
+      const color = isSelected ? selectedColor : favColor;
+      const colorTop = lighten(color, 0.35);
+      const icon = createStopIcon(color, colorTop, isSelected, true);
+      const marker = L.marker([stop.lat, stop.lng], { icon });
+      marker.on("click", () => onSelectStop(stop));
+      layer.addLayer(marker);
+    }
+  }, [favouriteStops, selectedStop?.stop_code, onSelectStop]);
+
   // Re-paint the bus layer when any of its inputs change. The callback reads
   // refs, so the effect itself can stay minimal and not depend on renderBuses.
   useEffect(() => {
@@ -421,6 +453,7 @@ export default function MapView({ favouriteStopCodes, favouriteStops, favouriteB
     tileLayerRef.current = L.tileLayer(tileUrl, { maxZoom: 19, keepBuffer: 4 }).addTo(map);
 
     markersLayer.current = L.layerGroup().addTo(map);
+    favStopsLayer.current = L.layerGroup().addTo(map);
     locationLayer.current = L.layerGroup().addTo(map);
     busesLayer.current = L.layerGroup().addTo(map);
     mapInstance.current = map;

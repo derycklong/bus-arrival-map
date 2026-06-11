@@ -165,7 +165,6 @@ export default function Home() {
       }
       const storedOnlyFav = localStorage.getItem("onlyShowFavorites");
       if (storedOnlyFav === "1") {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-hydration sync from localStorage
         setOnlyShowFavorites(true);
       }
     } catch { /* noop */ }
@@ -285,7 +284,12 @@ export default function Home() {
   }
 
   function handleSelectStop(stop: StopBase) {
-    setSelectedStop(stop);
+    setSelectedStop((prev) => {
+      if (prev?.stop_code === stop.stop_code) {
+        return { ...stop };
+      }
+      return stop;
+    });
   }
 
   function handleCloseSidebar() {
